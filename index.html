@@ -194,13 +194,7 @@
             }
 
             // --- LÓGICA DE RENDERIZAÇÃO ---
-            function renderAll() {
-                if (!currentBanca) return;
-                renderMetrics();
-                renderBets();
-                renderDailyGoal();
-                renderProjection();
-            }
+            function renderAll() { if (!currentBanca) return; renderMetrics(); renderBets(); renderDailyGoal(); renderProjection(); }
 
             function renderMetrics() {
                 bankrollInput.value = currentBanca.valor_inicial;
@@ -375,11 +369,23 @@
                 newDayBtn.disabled = true;
                 newDayBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Iniciando...';
                 try {
-                    const finalBankroll = getBankrollAtStartOfDay(getLocalDateString()) + getTodaysProfit();
+                    const todayStr = getLocalDateString();
+                    const todayMeta = metasDiarias.find(m => m.data === todayStr);
+                    if (!todayMeta) throw new Error("Registro de meta para hoje não encontrado.");
+                    
+                    const finalBankroll = todayMeta.banca_final;
+                    
                     const { error: updateError } = await _supabase.from('bancas').update({ valor_inicial: finalBankroll }).eq('id', currentBanca.id);
                     if (updateError) throw updateError;
-                    const { error: deleteError } = await _supabase.from('jogadas').delete().eq('banca_id', currentBanca.id);
+
+                    // DELETAR APENAS AS JOGADAS DO DIA QUE FOI FECHADO
+                    const { error: deleteError } = await _supabase.from('jogadas').delete().eq('banca_id', currentBanca.id).gte('data_jogada', todayStr).lt('data_jogada', getLocalDateString(new Date(new Date(todayStr).setDate(new Date(todayStr).getDate() + 1))));
                     if (deleteError) throw deleteError;
+
+                    // DELETAR O REGISTRO DA META DIÁRIA PARA PERMITIR UM NOVO CICLO
+                    const { error: deleteMetaError } = await _supabase.from('metas_diarias').delete().eq('id', todayMeta.id);
+                    if (deleteMetaError) throw deleteMetaError;
+
                     location.reload();
                 } catch (error) {
                     alert('Ocorreu um erro ao iniciar o novo dia: ' + error.message);
