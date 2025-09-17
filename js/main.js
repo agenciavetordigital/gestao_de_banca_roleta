@@ -1,5 +1,5 @@
 import { checkUserSession, login, register, logout } from "./auth.js";
-// import { loadDashboard, renderAll } from "./dashboard.js";
+import { loadDashboard } from "./dashboard.js"; // Importa a função do dashboard
 
 document.addEventListener("DOMContentLoaded", async () => {
   const authContainer = document.getElementById("auth-container");
@@ -23,7 +23,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     authContainer.classList.add("hidden");
     dashboardContainer.classList.remove("hidden");
     userEmailDisplay.textContent = `Logado como: ${user.email}`;
-    // await loadDashboard(user);
+    // ### LINHA CORRIGIDA - AGORA O DASHBOARD SERÁ CARREGADO ###
+    await loadDashboard(user);
   } else {
     dashboardContainer.classList.add("hidden");
     authContainer.classList.remove("hidden");
