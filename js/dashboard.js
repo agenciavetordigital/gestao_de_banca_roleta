@@ -1,20 +1,25 @@
 import { db } from "./supabaseClient.js";
+import { logout } from "./auth.js";
 
+// --- ESTADO ---
 let currentUser = null, currentBanca = null, jogadas = [], metasDiarias = [];
 
-const formatCurrency = (v) => (v||0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+// --- FUNÇÕES AUXILIARES ---
+const formatCurrency = (v) => (v === null || v === undefined ? 0 : v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const getLocalDateString = (d) => {
     const date = d ? new Date(d) : new Date();
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 };
 
-export async function loadDashboard(user, logoutFunction) {
+// --- FUNÇÃO PRINCIPAL ---
+export async function loadDashboard(user) {
     currentUser = user;
     await loadData();
     renderAll();
-    setupEvents(logoutFunction);
+    setupEvents();
 }
 
+// --- LÓGICA DE DADOS OTIMIZADA ---
 async function loadData() {
     const { data: bancaData, error: bancaError } = await db.from("bancas").select("*").eq("user_id", currentUser.id).single();
     if(bancaData) currentBanca = bancaData;
@@ -33,10 +38,13 @@ async function loadData() {
     metasDiarias = metasRes.data || [];
 }
 
+// --- LÓGICA DE RENDERIZAÇÃO ---
 function renderAll() {
-    if (!currentBanca) return;
-    const dashboardContainer = document.getElementById("dashboard-container");
-    dashboardContainer.innerHTML = `
+    if (!currentBanca) {
+        document.getElementById("dashboard-container").innerHTML = `<p class="text-center text-red-500">Não foi possível carregar os dados da sua banca.</p>`;
+        return;
+    }
+    document.getElementById("dashboard-container").innerHTML = `
         <header class="mb-8 flex flex-wrap justify-between items-center gap-4">
             <div><h1 class="text-3xl md:text-4xl font-bold text-white"><i class="fas fa-compact-disc mr-3 text-red-500"></i>Gestão de Banca</h1><p class="text-gray-400 mt-2 text-sm">Logado como: ${currentUser.email}</p></div>
             <button id="logout-btn" class="btn btn-red"><i class="fas fa-sign-out-alt mr-2"></i>Logout</button>
@@ -55,14 +63,6 @@ function renderAll() {
     renderMetrics(); renderSettings(); renderDailyGoal(); renderBetForm(); renderBets(); renderProjection();
 }
 
-function renderMetrics() { /* ... código ... */ }
-function renderSettings() { /* ... código ... */ }
-function renderDailyGoal() { /* ... código ... */ }
-function renderBetForm() { /* ... código ... */ }
-function renderBets() { /* ... código ... */ }
-function renderProjection() { /* ... código ... */ }
-
-// ... Colando as funções de renderização completas abaixo ...
 function renderMetrics() {
     const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
     const totalStaked = jogadas.reduce((acc, j) => acc + j.valor_apostado, 0);
@@ -74,7 +74,7 @@ function renderMetrics() {
     const winRate = jogadas.length > 0 ? (wonPlays / jogadas.length) * 100 : 0;
 
     document.getElementById('metrics-container').innerHTML = `
-        <div class="card"><h3 class="text-sm font-medium text-gray-400">BANCA INICIAL</h3><p class="text-2xl font-semibold mt-2">${formatCurrency(currentBanca.valor_inicial)}</p></div>
+        <div class="card"><h3 class="text-sm font-medium text-gray-400">BANCA INICIAL</h3><p class="text-2xl font-semibold mt-2">${formatCurrency(metasDiarias[0]?.banca_inicial || currentBanca.valor_inicial)}</p></div>
         <div class="card"><h3 class="text-sm font-medium text-gray-400">BANCA ATUAL</h3><p class="text-2xl font-semibold mt-2">${formatCurrency(currentBankroll)}</p></div>
         <div class="card"><h3 class="text-sm font-medium text-gray-400">LUCRO TOTAL</h3><p class="text-2xl font-semibold mt-2">${formatCurrency(totalProfitAllTime)}</p></div>
         <div class="card"><h3 class="text-sm font-medium text-gray-400">ROI DO CICLO</h3><p class="text-2xl font-semibold mt-2">${roi.toFixed(2)}%</p></div>
@@ -85,9 +85,9 @@ function renderSettings() {
     document.getElementById('settings-container').innerHTML = `
         <h2 class="text-xl font-bold mb-4">Configurações</h2>
         <div class="space-y-4">
-            <div><label for="bankroll-input" class="block text-sm font-medium text-gray-300 mb-2">Banca Inicial (R$)</label><input type="number" id="bankroll-input" value="${currentBanca.valor_inicial}" class="input-field"></div>
-            <div><label for="daily-goal-input" class="block text-sm font-medium text-gray-300 mb-2">Meta de Lucro Diário (%)</label><input type="number" id="daily-goal-input" value="${currentBanca.meta_diaria_percentual}" class="input-field"></div>
-            <button id="save-bankroll-btn" class="btn btn-primary w-full"><i class="fas fa-save mr-2"></i>Salvar Configurações</button>
+            <div><label for="bankroll-input" class="block text-sm font-medium text-gray-300 mb-2">Banca Inicial do Ciclo (R$)</label><input type="number" id="bankroll-input" value="${currentBanca.valor_inicial}" class="input-field"></div>
+            <div><label for="daily-goal-input" class="block text-sm font-medium text-gray-300 mb-2">Meta de Lucro (%)</label><input type="number" id="daily-goal-input" value="${currentBanca.meta_diaria_percentual}" class="input-field"></div>
+            <button id="save-settings-btn" class="btn btn-primary w-full"><i class="fas fa-save mr-2"></i>Salvar Configurações</button>
         </div>
     `;
 }
@@ -100,13 +100,13 @@ function renderDailyGoal() {
     const dayIsClosed = todayMeta && todayMeta.status === 'concluida';
 
     let content = `
-        <h2 class="text-xl font-bold mb-4">Meta Diária</h2>
+        <h2 class="text-xl font-bold mb-4">Meta do Ciclo</h2>
         <div class="space-y-4">
             <div class="flex justify-between text-sm"><span class="text-gray-400">Lucro do Ciclo:</span><span class="font-semibold">${formatCurrency(cycleProfit)}</span></div>
             <div class="flex justify-between text-sm"><span class="text-gray-400">Meta do Ciclo:</span><span class="font-semibold">${formatCurrency(targetProfit)}</span></div>
             <div id="goal-met-container" class="hidden mt-4 space-y-2 text-center">
                 <h3 id="goal-title" class="text-lg font-bold status-green">Parabéns, meta batida!</h3>
-                <button id="goal-met-btn" class="btn btn-green w-full"><i class="fas fa-flag-checkered mr-2"></i>Meta Atingida! Fechar Ciclo</button>
+                <button id="goal-met-btn" class="btn btn-green w-full"><i class="fas fa-flag-checkered mr-2"></i>Fechar Ciclo</button>
                 <button id="new-day-btn" class="btn btn-primary w-full hidden"><i class="fas fa-redo-alt mr-2"></i>Começar Novo Ciclo</button>
                 <p id="goal-met-message" class="text-sm text-gray-300 font-medium"></p>
             </div>
@@ -114,15 +114,15 @@ function renderDailyGoal() {
     `;
     document.getElementById('daily-goal-container').innerHTML = content;
 
+    const goalMetContainer = document.getElementById('goal-met-container');
     if (dayIsClosed) {
-        const goalMetContainer = document.getElementById('goal-met-container');
         goalMetContainer.classList.remove('hidden');
         document.getElementById('goal-title').textContent = "Ciclo Concluído!";
         document.getElementById('goal-met-message').textContent = `O ciclo do dia ${new Date(todayStr + 'T00:00:00').toLocaleDateString('pt-BR')} foi fechado.`;
         document.getElementById('goal-met-btn').classList.add('hidden');
         document.getElementById('new-day-btn').classList.remove('hidden');
     } else if (cycleProfit >= targetProfit && targetProfit > 0) {
-        document.getElementById('goal-met-container').classList.remove('hidden');
+        goalMetContainer.classList.remove('hidden');
     }
 }
 function renderBetForm() {
@@ -176,6 +176,7 @@ function renderBets() {
 function renderProjection() {
     let rows = "";
     let bankrollForProjection = metasDiarias[0]?.banca_inicial || currentBanca.valor_inicial;
+    
     metasDiarias.forEach(meta => {
         rows += `
             <tr class="bg-green-900/50">
@@ -188,12 +189,19 @@ function renderProjection() {
         `;
         bankrollForProjection = meta.banca_final;
     });
+    
     const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
-    bankrollForProjection += cycleProfit;
+    const currentBankroll = currentBanca.valor_inicial + cycleProfit;
+    
+    // Projeta 15 dias a partir do último estado (seja histórico ou atual)
+    let projectionStartBankroll = metasDiarias.length > 0 ? metasDiarias[metasDiarias.length-1].banca_final : currentBanca.valor_inicial;
+    if (jogadas.length > 0) {
+        projectionStartBankroll += cycleProfit;
+    }
+    
     for (let i = 0; i < 15; i++) {
         const lastDate = metasDiarias.length > 0 ? new Date(metasDiarias[metasDiarias.length - 1].data + 'T00:00:00') : new Date(new Date().setDate(new Date().getDate() - 1));
-        const date = new Date(lastDate);
-        date.setDate(lastDate.getDate() + i + 1);
+        const date = new Date(lastDate); date.setDate(lastDate.getDate() + i + 1);
         const initialProjected = bankrollForProjection;
         const goal = currentBanca.meta_diaria_percentual > 0 ? initialProjected * (currentBanca.meta_diaria_percentual / 100) : 0;
         const finalProjected = initialProjected + goal;
@@ -212,7 +220,7 @@ function renderProjection() {
         <h2 class="text-xl font-bold mb-4">Histórico de Metas e Projeção Futura</h2>
         <div class="overflow-x-auto"><table class="w-full text-left">
             <thead class="border-b border-gray-700 text-sm text-gray-400">
-                <tr><th class="p-3">Data</th><th class="p-3 text-right">Banca Inicial do Ciclo</th><th class="p-3 text-right">Lucro do Ciclo (R$)</th><th class="p-3 text-right">Banca Final do Ciclo</th><th class="p-3 text-center">Status</th></tr>
+                <tr><th class="p-3">Data</th><th class="p-3 text-right">Banca Inicial</th><th class="p-3 text-right">Lucro</th><th class="p-3 text-right">Banca Final</th><th class="p-3 text-center">Status</th></tr>
             </thead>
             <tbody>${rows}</tbody>
         </table></div>
@@ -220,9 +228,9 @@ function renderProjection() {
 }
 
 // --- CONFIGURAÇÃO DOS EVENTOS ---
-function setupEvents(logoutFunction) {
-    document.getElementById("logout-btn")?.addEventListener("click", async () => { await logoutFunction(); location.reload(); });
-    document.getElementById("save-bankroll-btn")?.addEventListener("click", async () => {
+function setupEvents() {
+    document.getElementById("logout-btn")?.addEventListener("click", async () => { await logout(); location.reload(); });
+    document.getElementById("save-settings-btn")?.addEventListener("click", async () => {
         const newBankroll = parseFloat(document.getElementById('bankroll-input').value);
         const newGoal = parseFloat(document.getElementById('daily-goal-input').value);
         if (isNaN(newBankroll) || isNaN(newGoal)) { return alert('Valores inválidos.'); }
@@ -243,7 +251,8 @@ function setupEvents(logoutFunction) {
         else if (outcome === 'loss') { result = 0; status = 'loss'; }
         if (totalStake <= 0) return alert("Valor apostado inválido.");
         const { data: newBet, error } = await db.from('jogadas').insert({ banca_id: currentBanca.id, valor_apostado: totalStake, retorno: result, status: status, estrategia: 'Jogada Manual' }).select().single();
-        if (error) { alert("Erro ao registrar jogada."); } else { jogadas.unshift(newBet); document.getElementById('add-bet-form').reset(); renderAll(); setupEvents(); }
+        if (error) { alert("Erro ao registrar jogada."); }
+        else { jogadas.unshift(newBet); document.getElementById('add-bet-form').reset(); renderAll(); setupEvents(); }
     });
     document.getElementById("clear-data-btn")?.addEventListener("click", async () => {
         if (!confirm("Tem certeza?")) return;
@@ -277,7 +286,7 @@ function setupEvents(logoutFunction) {
             btn.innerHTML = '<i class="fas fa-redo-alt mr-2"></i>Começar Novo Ciclo';
         }
     });
-    document.getElementById("bets-history-container")?.addEventListener("click", async (e) => {
+    document.getElementById("dashboard-container")?.addEventListener("click", async (e) => {
         if (e.target.closest('.delete-btn')) {
             const button = e.target.closest('.delete-btn');
             const idToDelete = button.getAttribute('data-id');
