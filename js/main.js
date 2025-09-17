@@ -10,16 +10,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   const showLoginLink = document.getElementById("show-login-link");
   const authErrorEl = document.getElementById("auth-error");
   const registerMessageEl = document.getElementById("register-message");
-
-  // O botão de logout só existe depois que o dashboard é renderizado
-  // então o evento dele será configurado no dashboard.js
   
   const user = await checkUserSession();
   
   if (user) {
     authContainer.classList.add("hidden");
     dashboardContainer.classList.remove("hidden");
-    await loadDashboard(user);
+    await loadDashboard(user, logout);
   } else {
     dashboardContainer.classList.add("hidden");
     authContainer.classList.remove("hidden");
