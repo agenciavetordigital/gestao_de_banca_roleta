@@ -200,13 +200,18 @@
                 const totalStaked = jogadas.reduce((acc, j) => acc + j.valor_apostado, 0);
                 const wonPlays = jogadas.filter(j => j.retorno > j.valor_apostado).length;
                 const currentBankroll = currentBanca.valor_inicial + cycleProfit;
-                const totalProfit = currentBankroll - (metasDiarias[0]?.banca_inicial || currentBanca.valor_inicial);
-
+                
+                let totalProfitAllTime = cycleProfit;
+                metasDiarias.forEach(meta => { totalProfitAllTime += meta.lucro_final; });
+                
+                const roi = totalStaked > 0 ? (cycleProfit / totalStaked) * 100 : 0;
+                const winRate = jogadas.length > 0 ? (wonPlays / jogadas.length) * 100 : 0;
+                
                 initialBankrollEl.textContent = formatCurrency(currentBanca.valor_inicial);
                 currentBankrollEl.textContent = formatCurrency(currentBankroll);
-                profitLossEl.textContent = formatCurrency(totalProfit);
-                roiEl.textContent = `${totalStaked > 0 ? (totalProfit / totalStaked) * 100 : 0}%`;
-                winRateEl.textContent = `${jogadas.length > 0 ? (wonPlays / jogadas.length) * 100 : 0}%`;
+                profitLossEl.textContent = formatCurrency(totalProfitAllTime); // Lucro total agora considera o histórico
+                roiEl.textContent = `${roi.toFixed(2)}%`; // ROI é do ciclo atual
+                winRateEl.textContent = `${winRate.toFixed(2)}%`; // Win Rate é do ciclo atual
             }
 
             function renderDailyGoal() {
@@ -263,8 +268,9 @@
             
             function renderProjection() {
                 projectionTableBody.innerHTML = '';
-                let bankrollForProjection = metasDiarias[0]?.banca_inicial || currentBanca.valor_inicial;
+                let bankrollForProjection = currentBanca.valor_inicial;
                 
+                // Renderiza dias históricos primeiro
                 metasDiarias.forEach(meta => {
                     const row = document.createElement('tr');
                     row.className = 'bg-green-900/50';
@@ -280,23 +286,15 @@
                 });
                 
                 const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
-                const currentDayBankroll = currentBanca.valor_inicial + cycleProfit;
-                
-                const remainingDays = 15;
-                let projectionStartBankroll = metasDiarias.length > 0 ? metasDiarias[metasDiarias.length - 1].banca_final : currentBanca.valor_inicial;
-                if (jogadas.length > 0) {
-                     projectionStartBankroll = currentBanca.valor_inicial + cycleProfit;
-                }
+                bankrollForProjection += cycleProfit;
 
+                // Renderiza projeção futura
+                for (let i = 0; i < 15; i++) {
+                    const lastDate = metasDiarias.length > 0 ? new Date(metasDiarias[metasDiarias.length - 1].data + 'T00:00:00') : new Date();
+                    const date = new Date(lastDate);
+                    date.setDate(lastDate.getDate() + i + 1);
 
-                for (let i = 0; i < remainingDays; i++) {
-                    const date = new Date(); date.setDate(new Date(metasDiarias[metasDiarias.length - 1]?.data || new Date()).getDate() + i + 1);
-                     if (i === 0 && jogadas.length > 0) {
-                         initialProjected = projectionStartBankroll;
-                     } else {
-                         initialProjected = bankrollForProjection;
-                     }
-
+                    const initialProjected = bankrollForProjection;
                     const goal = currentBanca.meta_diaria_percentual > 0 ? initialProjected * (currentBanca.meta_diaria_percentual / 100) : 0;
                     const finalProjected = initialProjected + goal;
                     const row = document.createElement('tr');
@@ -356,15 +354,19 @@
                 }
             });
             
+            // ### LÓGICA DO BOTÃO 'COMEÇAR NOVO CICLO' CORRIGIDA ###
             newDayBtn.addEventListener('click', async () => {
                 newDayBtn.disabled = true;
                 newDayBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Iniciando...';
                 try {
                     const finalBankroll = currentBanca.valor_inicial + jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
+                    
                     const { error: updateError } = await _supabase.from('bancas').update({ valor_inicial: finalBankroll }).eq('id', currentBanca.id);
                     if (updateError) throw updateError;
+
                     const { error: deletePlaysError } = await _supabase.from('jogadas').delete().eq('banca_id', currentBanca.id);
                     if (deletePlaysError) throw deletePlaysError;
+
                     location.reload();
                 } catch (error) {
                     console.error("Erro ao iniciar novo ciclo:", error);
