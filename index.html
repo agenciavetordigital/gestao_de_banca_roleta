@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestão de Banca para Roleta</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #111827; color: #f3f4f6; }
+        .card { background-color: #1f2937; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #374151; }
+        .btn { color: white; font-weight: 600; padding: 0.75rem 1rem; border-radius: 0.5rem; transition: background-color 0.3s ease, transform 0.1s ease; border: none; cursor: pointer; }
+        .btn:disabled { background-color: #4b5563; cursor: not-allowed; }
+        .btn:active:not(:disabled) { transform: scale(0.98); }
+        .btn-green { background-color: #16a34a; } .btn-green:hover:not(:disabled) { background-color: #15803d; }
+        .btn-red { background-color: #dc2626; } .btn-red:hover:not(:disabled) { background-color: #b91c1c; }
+        .btn-blue { background-color: #2563eb; } .btn-blue:hover:not(:disabled) { background-color: #1d4ed8; }
+        .btn-primary { background-color: #3b82f6; } .btn-primary:hover:not(:disabled) { background-color: #2563eb; }
+        .input-field { background-color: #374151; border: 1px solid #4b5563; color: #f3f4f6; border-radius: 0.5rem; padding: 0.75rem; width: 100%; }
+        .input-field:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px #1e40af; }
+        .hidden { display: none; }
+        ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-track { background: #1f2937; } ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; } ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+        .progress-bar { background-color: #374151; border-radius: 0.5rem; overflow: hidden; height: 1.25rem; }
+        .progress-bar-inner { background-color: #3b82f6; height: 100%; transition: width 0.5s ease-in-out; text-align: center; font-size: 0.75rem; line-height: 1.25rem; color: white; font-weight: 600; }
+        .status-green { color: #22c55e; } .status-red { color: #ef4444; } .status-blue { color: #3b82f6; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div id="auth-container" class="max-w-md mx-auto hidden">
+        <div class="card">
+            <div id="login-view">
+                <h2 class="text-2xl font-bold text-center mb-6">Login</h2>
+                <form id="login-form" class="space-y-4">
+                    <div><label for="login-email" class="block text-sm font-medium text-gray-300 mb-2">Email</label><input type="email" id="login-email" class="input-field" required></div>
+                    <div><label for="login-password" class="block text-sm font-medium text-gray-300 mb-2">Senha</label><input type="password" id="login-password" class="input-field" required></div>
+                    <button type="submit" class="btn btn-primary w-full">Entrar</button>
+                    <p id="auth-error" class="text-red-500 text-sm text-center h-4"></p>
+                </form>
+                <p class="text-center mt-4 text-sm">Não tem uma conta? <a href="#" id="show-register-link" class="font-semibold text-blue-400 hover:underline">Cadastre-se</a></p>
+            </div>
+            <div id="register-view" class="hidden">
+                <h2 class="text-2xl font-bold text-center mb-6">Criar Conta</h2>
+                <form id="register-form" class="space-y-4">
+                    <div><label for="register-email" class="block text-sm font-medium text-gray-300 mb-2">Email</label><input type="email" id="register-email" class="input-field" required></div>
+                    <div><label for="register-password" class="block text-sm font-medium text-gray-300 mb-2">Senha</label><input type="password" id="register-password" class="input-field" required></div>
+                    <button type="submit" class="btn btn-primary w-full">Cadastrar</button>
+                    <p id="register-message" class="text-green-500 text-sm text-center h-4"></p>
+                </form>
+                <p class="text-center mt-4 text-sm">Já tem uma conta? <a href="#" id="show-login-link" class="font-semibold text-blue-400 hover:underline">Faça o login</a></p>
+            </div>
+        </div>
+    </div>
+
+    <div id="dashboard-container" class="max-w-7xl mx-auto hidden">
+         <header class="mb-8 flex flex-wrap justify-between items-center gap-4">
+            <div>
+                <h1 class="text-3xl md:text-4xl font-bold text-white"><i class="fas fa-compact-disc mr-3 text-red-500"></i>Gestão de Banca</h1>
+                <p id="user-email-display" class="text-gray-400 mt-2 text-sm">Logado como: ...</p>
+            </div>
+            <button id="logout-btn" class="btn btn-red"><i class="fas fa-sign-out-alt mr-2"></i>Logout</button>
+        </header>
+
+        <section class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
+            <div class="card"><h3 class="text-sm font-medium text-gray-400">BANCA INICIAL</h3><p id="initial-bankroll" class="text-2xl font-semibold mt-2">R$ 0,00</p></div>
+            <div class="card"><h3 class="text-sm font-medium text-gray-400">BANCA ATUAL</h3><p id="current-bankroll" class="text-2xl font-semibold mt-2">R$ 0,00</p></div>
+            <div class="card"><h3 class="text-sm font-medium text-gray-400">LUCRO TOTAL</h3><p id="profit-loss" class="text-2xl font-semibold mt-2">R$ 0,00</p></div>
+            <div class="card"><h3 class="text-sm font-medium text-gray-400">ROI</h3><p id="roi" class="text-2xl font-semibold mt-2">0.00%</p></div>
+            <div class="card col-span-2 md:col-span-1"><h3 class="text-sm font-medium text-gray-400">WIN RATE</h3><p id="win-rate" class="text-2xl font-semibold mt-2">0.00%</p></div>
+        </section>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+            <div class="lg:col-span-1 space-y-8">
+                <div class="card">
+                    <h2 class="text-xl font-bold mb-4">Configurações</h2>
+                    <div class="space-y-4">
+                        <div><label for="bankroll-input" class="block text-sm font-medium text-gray-300 mb-2">Banca Inicial (R$)</label><input type="number" id="bankroll-input" placeholder="Ex: 100.00" class="input-field"></div>
+                        <div><label for="daily-goal-input" class="block text-sm font-medium text-gray-300 mb-2">Meta de Lucro Diário (%)</label><input type="number" id="daily-goal-input" placeholder="Ex: 25" class="input-field"></div>
+                        <button id="save-bankroll-btn" class="btn btn-primary w-full"><i class="fas fa-save mr-2"></i>Salvar Configurações</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2 class="text-xl font-bold mb-4">Meta Diária</h2>
+                    <div class="space-y-4">
+                        <div class="flex justify-between text-sm"><span class="text-gray-400">Lucro de Hoje:</span><span id="today-profit" class="font-semibold">R$ 0,00</span></div>
+                        <div class="flex justify-between text-sm"><span class="text-gray-400">Meta de Hoje:</span><span id="today-target" class="font-semibold">R$ 0,00</span></div>
+                        <div class="progress-bar mt-2"><div id="progress-bar-inner" class="progress-bar-inner" style="width: 0%;">0%</div></div>
+                        <div id="goal-met-container" class="hidden mt-4 space-y-2 text-center">
+                            <h3 id="goal-title" class="text-lg font-bold status-green">Parabéns, meta batida!</h3>
+                            <button id="goal-met-btn" class="btn btn-green w-full"><i class="fas fa-flag-checkered mr-2"></i>Meta Atingida! Fechar Dia</button>
+                            <button id="new-day-btn" class="btn btn-primary w-full hidden"><i class="fas fa-redo-alt mr-2"></i>Começar Novo Dia de Metas</button>
+                            <p id="goal-met-message" class="text-sm text-gray-300 font-medium"></p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h2 class="text-xl font-bold mb-4">Registrar Jogada de Cobertura</h2>
+                    <form id="add-bet-form" class="space-y-4">
+                        <div><label for="chip-value" class="block text-sm font-medium text-gray-300 mb-2">Valor da Ficha (R$)</label><input type="number" id="chip-value" placeholder="Ex: 1.00" step="0.01" class="input-field"></div>
+                        <div><label for="numbers-covered" class="block text-sm font-medium text-gray-300 mb-2">Quantidade de Números Cobertos</label><input type="number" id="numbers-covered" placeholder="Ex: 10" class="input-field"></div>
+                        <div><label for="zero-stake" class="block text-sm font-medium text-gray-300 mb-2">Proteção no Zero (R$)</label><input type="number" id="zero-stake" placeholder="Deixe em branco" step="0.01" class="input-field"></div>
+                        <div class="grid grid-cols-1 gap-3 pt-2">
+                            <button type="submit" name="win_number" class="btn btn-green"><i class="fas fa-check-circle mr-2"></i>Vitória em Número (35:1)</button>
+                            <button type="submit" name="win_zero" class="btn btn-blue"><i class="fas fa-star mr-2"></i>Vitória no Zero (35:1)</button>
+                            <button type="submit" name="loss" class="btn btn-red"><i class="fas fa-times-circle mr-2"></i>Derrota</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="lg:col-span-2 card">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold">Histórico de Jogadas</h2>
+                    <button id="clear-data-btn" class="text-sm text-red-500 hover:text-red-400 font-semibold"><i class="fas fa-trash-alt mr-1"></i> Limpar Jogadas</button>
+                </div>
+                <div class="overflow-x-auto"><table class="w-full text-left">
+                    <thead class="border-b border-gray-700 text-sm text-gray-400">
+                        <tr><th class="p-3">Data</th><th class="p-3">Estratégia</th><th class="p-3 text-right">Apostado</th><th class="p-3 text-right">Retorno</th><th class="p-3 text-right">Lucro/Prejuízo</th><th class="p-3 text-center">Status</th><th class="p-3 text-center">Ações</th></tr>
+                    </thead>
+                    <tbody id="bets-table-body"></tbody>
+                </table><p id="no-bets-message" class="text-center text-gray-500 py-8">Nenhuma jogada registrada ainda.</p></div>
+            </div>
+        </div>
+
+        <div class="card mb-8">
+            <h2 class="text-xl font-bold mb-4">Histórico e Projeção de Ganhos (15 Dias)</h2>
+            <p class="text-sm text-gray-400 mb-4">A tabela mostra os dias com meta batida e projeta os próximos com base na sua banca atual.</p>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead class="border-b border-gray-700 text-sm text-gray-400">
+                        <tr><th class="p-3">Dia</th><th class="p-3">Data</th><th class="p-3 text-right">Banca Inicial</th><th class="p-3 text-right">Meta Lucro (R$)</th><th class="p-3 text-right">Banca Final</th><th class="p-3 text-center">Status</th></tr>
+                    </thead>
+                    <tbody id="projection-table-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- INICIALIZAÇÃO E CONEXÃO ---
+            const { createClient } = supabase;
+            const supabaseUrl = 'https://dekubpsswkfrtotwljvf.supabase.co';
+            const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRla3VicHNzd2tmcnRvdHdsanZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgwNzYyOTAsImV4cCI6MjA3MzY1MjI5MH0.Winuq2LIkaGt1sGNXUhi__Q5_AczyxKAYQ_ORABoPTk';
+            const _supabase = createClient(supabaseUrl, supabaseKey);
+
+            // --- ESTADO DA APLICAÇÃO ---
+            let currentUser = null, currentBanca = null, jogadas = [], metasDiarias = [];
+
+            // --- SELETORES DE ELEMENTOS ---
+            const authContainer = document.getElementById('auth-container'), dashboardContainer = document.getElementById('dashboard-container');
+            const loginForm = document.getElementById('login-form'), registerForm = document.getElementById('register-form'), logoutBtn = document.getElementById('logout-btn');
+            const showRegisterLink = document.getElementById('show-register-link'), showLoginLink = document.getElementById('show-login-link');
+            const userEmailDisplay = document.getElementById('user-email-display'), authErrorEl = document.getElementById('auth-error'), registerMessageEl = document.getElementById('register-message');
+            const initialBankrollEl = document.getElementById('initial-bankroll'), currentBankrollEl = document.getElementById('current-bankroll'), profitLossEl = document.getElementById('profit-loss');
+            const roiEl = document.getElementById('roi'), winRateEl = document.getElementById('win-rate');
+            const bankrollInput = document.getElementById('bankroll-input'), dailyGoalInput = document.getElementById('daily-goal-input'), saveBankrollBtn = document.getElementById('save-bankroll-btn');
+            const todayProfitEl = document.getElementById('today-profit'), todayTargetEl = document.getElementById('today-target'), progressBarInner = document.getElementById('progress-bar-inner');
+            const goalMetContainer = document.getElementById('goal-met-container'), goalMetBtn = document.getElementById('goal-met-btn'), goalMetMessage = document.getElementById('goal-met-message');
+            const betsTableBody = document.getElementById('bets-table-body'), noBetsMessage = document.getElementById('no-bets-message'), clearDataBtn = document.getElementById('clear-data-btn');
+            const projectionTableBody = document.getElementById('projection-table-body');
+            const addBetForm = document.getElementById('add-bet-form');
+            // ### SELETORES CORRIGIDOS E ADICIONADOS ###
+            const newDayBtn = document.getElementById('new-day-btn');
+            const goalTitle = document.getElementById('goal-title');
+
+            // --- FUNÇÃO AUXILIAR DE DATA ---
+            function getLocalDateString(date) {
+                const d = date ? new Date(date) : new Date();
+                return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            }
+            
+            // --- FUNÇÕES DE LÓGICA DE DADOS ---
+            async function loadDashboardData() {
+                if (!currentUser) return;
+                const { data: bancaData, error: bancaError } = await _supabase.from('bancas').select('*').eq('user_id', currentUser.id).single();
+                if (bancaData) currentBanca = bancaData;
+                else if (!bancaError || bancaError.code === 'PGRST116') {
+                    const { data: newBanca } = await _supabase.from('bancas').insert({ user_id: currentUser.id, nome_banca: 'Banca Principal', valor_inicial: 100, meta_diaria_percentual: 25 }).select().single();
+                    if (newBanca) currentBanca = newBanca;
+                } else { console.error("Erro ao carregar banca:", bancaError); return; }
+
+                const { data: jogadasData } = await _supabase.from('jogadas').select('*').eq('banca_id', currentBanca.id).order('data_jogada', { ascending: false });
+                if (jogadasData) jogadas = jogadasData;
+
+                const { data: metasData } = await _supabase.from('metas_diarias').select('*').eq('banca_id', currentBanca.id);
+                if (metasData) metasDiarias = metasData;
+                
+                renderAll();
+            }
+
+            // --- FUNÇÕES DE RENDERIZAÇÃO ---
+            function renderAll() {
+                if (!currentBanca) return;
+                renderMetrics();
+                renderBets();
+                renderDailyGoal();
+                renderProjection();
+            }
+
+            function renderMetrics() {
+                bankrollInput.value = currentBanca.valor_inicial;
+                dailyGoalInput.value = currentBanca.meta_diaria_percentual;
+                const totalProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
+                const totalStaked = jogadas.reduce((acc, j) => acc + j.valor_apostado, 0);
+                const wonPlays = jogadas.filter(j => j.retorno > j.valor_apostado).length;
+                const currentBankroll = currentBanca.valor_inicial + totalProfit;
+                const roi = totalStaked > 0 ? (totalProfit / totalStaked) * 100 : 0;
+                const winRate = jogadas.length > 0 ? (wonPlays / jogadas.length) * 100 : 0;
+                initialBankrollEl.textContent = formatCurrency(currentBanca.valor_inicial);
+                currentBankrollEl.textContent = formatCurrency(currentBankroll);
+                profitLossEl.textContent = formatCurrency(totalProfit);
+                roiEl.textContent = `${roi.toFixed(2)}%`;
+                winRateEl.textContent = `${winRate.toFixed(2)}%`;
+                [profitLossEl, roiEl].forEach(el => {
+                    el.className = 'text-2xl font-semibold mt-2';
+                    const value = parseFloat(el.textContent.replace('R$', '').replace(/\./g, '').replace(',', '.'));
+                    if (value > 0) el.classList.add('status-green'); else if (value < 0) el.classList.add('status-red');
+                });
+            }
+
+            function renderDailyGoal() {
+                const todayStr = getLocalDateString();
+                const todayMeta = metasDiarias.find(m => m.data === todayStr);
+                const dayIsClosed = todayMeta && todayMeta.status === 'concluida';
+                const todayProfit = getTodaysProfit();
+                const startOfDayBankroll = getBankrollAtStartOfDay(todayStr);
+                const targetProfit = currentBanca.meta_diaria_percentual > 0 ? startOfDayBankroll * (currentBanca.meta_diaria_percentual / 100) : 0;
+                todayProfitEl.textContent = formatCurrency(todayProfit);
+                todayProfitEl.className = `font-semibold ${todayProfit > 0 ? 'status-green' : todayProfit < 0 ? 'status-red' : ''}`;
+                todayTargetEl.textContent = formatCurrency(targetProfit);
+                const progress = targetProfit > 0 ? Math.min((todayProfit / targetProfit) * 100, 100) : 0;
+                progressBarInner.style.width = `${progress}%`;
+                progressBarInner.textContent = `${Math.round(progress)}%`;
+                progressBarInner.style.backgroundColor = progress >= 100 ? '#22c55e' : '#3b82f6';
+
+                if (dayIsClosed) {
+                    goalMetContainer.classList.remove('hidden');
+                    goalTitle.textContent = "Dia Concluído!";
+                    goalMetMessage.textContent = `O ciclo de hoje foi fechado com lucro de ${formatCurrency(todayMeta.lucro_final)}.`;
+                    goalMetBtn.classList.add('hidden');
+                    newDayBtn.classList.remove('hidden');
+                    addBetForm.querySelectorAll('input, button').forEach(el => el.disabled = true);
+                } else {
+                    goalMetMessage.textContent = '';
+                    addBetForm.querySelectorAll('input, button').forEach(el => el.disabled = false);
+                    if (progress >= 100 && targetProfit > 0) {
+                        goalMetContainer.classList.remove('hidden');
+                        goalTitle.textContent = "Parabéns, meta batida!";
+                        goalMetBtn.classList.remove('hidden');
+                        newDayBtn.classList.add('hidden');
+                    } else {
+                        goalMetContainer.classList.add('hidden');
+                    }
+                }
+            }
+            
+            function renderBets() {
+                betsTableBody.innerHTML = '';
+                noBetsMessage.style.display = jogadas.length === 0 ? 'table-row' : 'none';
+                jogadas.forEach(bet => {
+                    const profit = bet.retorno - bet.valor_apostado;
+                    const row = document.createElement('tr');
+                    row.className = 'border-b border-gray-800 hover:bg-gray-700/50';
+                    row.innerHTML = `
+                        <td class="p-3 text-sm text-gray-400">${new Date(bet.data_jogada).toLocaleString('pt-BR')}</td>
+                        <td class="p-3 font-medium">${bet.estrategia}</td>
+                        <td class="p-3 text-right">${formatCurrency(bet.valor_apostado)}</td>
+                        <td class="p-3 text-right">${formatCurrency(bet.retorno)}</td>
+                        <td class="p-3 text-right ${profit > 0 ? 'status-green' : profit < 0 ? 'status-red' : ''}">${formatCurrency(profit)}</td>
+                        <td class="p-3 text-center">${getStatusBadge(bet.status)}</td>
+                        <td class="p-3 text-center"><button class="text-red-500 hover:text-red-400 delete-btn" data-id="${bet.id}"><i class="fas fa-trash-alt"></i></button></td>
+                    `;
+                    betsTableBody.appendChild(row);
+                });
+                addDeleteEventListeners();
+            }
+            
+            function renderProjection() {
+                projectionTableBody.innerHTML = '';
+                let bankrollForProjection = getBankrollAtStartOfDay(getLocalDateString()) + getTodaysProfit();
+                for (let i = 0; i < 15; i++) {
+                    const date = new Date(); date.setDate(date.getDate() + i);
+                    const dateStr = getLocalDateString(date);
+                    const metaDoDia = metasDiarias.find(m => m.data === dateStr);
+                    let initialProjected = (i === 0) ? getBankrollAtStartOfDay(dateStr) : bankrollForProjection;
+                    let finalProjected, goal, status, rowClass = '';
+                    if (metaDoDia && metaDoDia.status === 'concluida') {
+                        goal = metaDoDia.lucro_final;
+                        finalProjected = metaDoDia.banca_final;
+                        status = '<span class="status-green font-semibold">Alcançado ✅</span>';
+                        rowClass = 'bg-green-900/50';
+                    } else {
+                        goal = currentBanca.meta_diaria_percentual > 0 ? initialProjected * (currentBanca.meta_diaria_percentual / 100) : 0;
+                        finalProjected = initialProjected + goal;
+                        status = 'Pendente';
+                    }
+                    const row = document.createElement('tr'); row.className = rowClass;
+                    row.innerHTML = `
+                        <td class="p-3 font-medium">${i + 1}</td>
+                        <td class="p-3 text-sm text-gray-400">${date.toLocaleDateString('pt-BR')}</td>
+                        <td class="p-3 text-right">${formatCurrency(initialProjected)}</td>
+                        <td class="p-3 text-right status-green">${formatCurrency(goal)}</td>
+                        <td class="p-3 text-right font-semibold">${formatCurrency(finalProjected)}</td>
+                        <td class="p-3 text-center">${status}</td>
+                    `;
+                    projectionTableBody.appendChild(row);
+                    bankrollForProjection = finalProjected;
+                }
+            }
+
+            // --- FUNÇÕES AUXILIARES ---
+            function getBankrollAtStartOfDay(dateStr) {
+                const playsBeforeToday = jogadas.filter(j => getLocalDateString(j.data_jogada) < dateStr);
+                const profitBeforeToday = playsBeforeToday.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
+                return currentBanca.valor_inicial + profitBeforeToday;
+            }
+            function getTodaysProfit() {
+                const todayStr = getLocalDateString();
+                const todaysPlays = jogadas.filter(j => getLocalDateString(j.data_jogada) === todayStr);
+                return todaysPlays.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
+            }
+            function getStatusBadge(status) {
+                if (status && status.startsWith('win')) return '<span class="status-green font-semibold">Ganha</span>';
+                if (status === 'loss') return '<span class="status-red font-semibold">Perdida</span>'; return '';
+            }
+            function formatCurrency(value) { return (value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
+            
+            // --- EVENTOS ---
+            addBetForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const outcome = e.submitter.name, description = 'Jogada de Cobertura';
+                const chipValue = parseFloat(document.getElementById('chip-value').value) || 0;
+                const numbersCovered = parseInt(document.getElementById('numbers-covered').value) || 0;
+                const zeroStake = parseFloat(document.getElementById('zero-stake').value) || 0;
+                if (outcome === 'win_number' && (chipValue <= 0 || numbersCovered <= 0)) { alert('Para "Vitória em Número", preencha o valor da ficha e a quantidade de números.'); return; }
+                if (outcome === 'win_zero' && zeroStake <= 0) { alert('Para "Vitória no Zero", preencha a proteção no zero.'); return; }
+                if(chipValue <= 0 && zeroStake <= 0) { alert('Preencha um valor de aposta.'); return; }
+                const totalStake = (chipValue * numbersCovered) + zeroStake;
+                let result = 0, status = '';
+                switch (outcome) {
+                    case 'win_number': result = chipValue * 36; status = 'win'; break;
+                    case 'win_zero': result = zeroStake * 36; status = 'win_zero'; break;
+                    case 'loss': result = 0; status = 'loss'; break;
+                }
+                const { data, error } = await _supabase.from('jogadas').insert({ banca_id: currentBanca.id, estrategia: description, valor_apostado: totalStake, retorno: result, status: status, data_jogada: new Date().toISOString() }).select().single();
+                if (error) { alert('Erro ao salvar a jogada: ' + error.message); } 
+                else { jogadas.unshift(data); addBetForm.reset(); renderAll(); }
+            });
+            
+            saveBankrollBtn.addEventListener('click', async () => {
+                const newBankroll = parseFloat(bankrollInput.value);
+                const newGoal = parseFloat(dailyGoalInput.value);
+                if (isNaN(newBankroll) || isNaN(newGoal)) { alert('Por favor, preencha valores numéricos válidos.'); return; }
+                const { data, error } = await _supabase.from('bancas').update({ valor_inicial: newBankroll, meta_diaria_percentual: newGoal }).eq('id', currentBanca.id).select().single();
+                if (error) { alert('Erro ao salvar configurações: ' + error.message); } 
+                else { currentBanca = data; alert('Configurações salvas com sucesso!'); renderAll(); }
+            });
+
+            goalMetBtn.addEventListener('click', async () => {
+                const todayStr = getLocalDateString();
+                const todayProfit = getTodaysProfit();
+                const finalBankroll = getBankrollAtStartOfDay(todayStr) + todayProfit;
+                const { data, error } = await _supabase.from('metas_diarias').upsert({ user_id: currentUser.id, banca_id: currentBanca.id, data: todayStr, status: 'concluida', lucro_final: todayProfit, banca_final: finalBankroll }, { onConflict: 'banca_id, data' }).select().single();
+                if (error) { alert('Erro ao fechar o dia: ' + error.message); } 
+                else {
+                    const index = metasDiarias.findIndex(m => m.data === todayStr);
+                    if (index > -1) metasDiarias[index] = data; else metasDiarias.push(data);
+                    alert('Meta do dia concluída e salva com sucesso!');
+                    renderAll();
+                }
+            });
+            
+            // ### EVENTO DO BOTÃO 'COMEÇAR NOVO DIA' ATUALIZADO ###
+            newDayBtn.addEventListener('click', async () => {
+                const todayStr = getLocalDateString();
+                const todayMeta = metasDiarias.find(m => m.data === todayStr);
+                if (!todayMeta || todayMeta.status !== 'concluida') {
+                    alert('Erro: O dia precisa ser fechado primeiro.');
+                    return;
+                }
+                
+                const finalBankroll = todayMeta.banca_final;
+                
+                // 1. Atualiza a banca com o valor final do dia fechado
+                const { error: updateError } = await _supabase.from('bancas').update({ valor_inicial: finalBankroll }).eq('id', currentBanca.id);
+                if(updateError) { alert('Erro ao atualizar a banca: ' + updateError.message); return; }
+
+                // 2. Apaga as jogadas do ciclo anterior (agora da banca toda)
+                const { error: deleteError } = await _supabase.from('jogadas').delete().eq('banca_id', currentBanca.id);
+                if(deleteError) { alert('Erro ao limpar jogadas do ciclo: ' + deleteError.message); return; }
+
+                // 3. Recarrega a página para um estado limpo
+                location.reload();
+            });
+            
+            function addDeleteEventListeners() {
+                document.querySelectorAll('.delete-btn').forEach(button => {
+                    button.addEventListener('click', async (e) => {
+                        const idToDelete = e.currentTarget.getAttribute('data-id');
+                        if (confirm('Tem certeza que deseja apagar esta jogada?')) {
+                            const { error } = await _supabase.from('jogadas').delete().eq('id', idToDelete);
+                            if(error) { alert('Erro ao apagar jogada: ' + error.message); } 
+                            else { jogadas = jogadas.filter(j => j.id != idToDelete); renderAll(); }
+                        }
+                    });
+                });
+            }
+            
+            clearDataBtn.addEventListener('click', async () => {
+                if (confirm('Tem certeza que deseja apagar TODAS AS JOGADAS desta banca? Esta ação não pode ser desfeita.')) {
+                    const { error } = await _supabase.from('jogadas').delete().eq('banca_id', currentBanca.id);
+                    if(error) { alert('Erro ao apagar jogadas: ' + error.message); } 
+                    else { jogadas = []; renderAll(); }
+                }
+            });
+
+            // --- LÓGICA DE AUTENTICAÇÃO ---
+            loginForm.addEventListener('submit', async (e) => { e.preventDefault(); authErrorEl.textContent = ''; const email = document.getElementById('login-email').value; const password = document.getElementById('login-password').value; const { error } = await _supabase.auth.signInWithPassword({ email, password }); if (error) { authErrorEl.textContent = 'Email ou senha inválidos.'; } else { location.reload(); } });
+            registerForm.addEventListener('submit', async (e) => { e.preventDefault(); registerMessageEl.textContent = ''; const email = document.getElementById('register-email').value; const password = document.getElementById('register-password').value; const { error } = await _supabase.auth.signUp({ email, password }); if (error) { alert(`Erro ao cadastrar: ${error.message}`); } else { registerMessageEl.textContent = 'Cadastro realizado! Verifique seu e-mail para confirmar a conta.'; } });
+            logoutBtn.addEventListener('click', async () => { await _supabase.auth.signOut(); location.reload(); });
+            showRegisterLink.addEventListener('click', (e) => { e.preventDefault(); loginView.classList.add('hidden'); registerView.classList.remove('hidden'); });
+            showLoginLink.addEventListener('click', (e) => { e.preventDefault(); registerView.classList.add('hidden'); loginView.classList.remove('hidden'); });
+
+            const checkUserSession = async () => {
+                const { data: { session } } = await _supabase.auth.getSession();
+                if (session) {
+                    currentUser = session.user;
+                    authContainer.classList.add('hidden');
+                    dashboardContainer.classList.remove('hidden');
+                    userEmailDisplay.textContent = `Logado como: ${currentUser.email}`;
+                    await loadDashboardData();
+                } else {
+                    dashboardContainer.classList.add('hidden');
+                    authContainer.classList.remove('hidden');
+                }
+            };
+            
+            checkUserSession();
+        });
+    </script>
+</body>
+</html>
