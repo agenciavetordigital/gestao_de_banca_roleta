@@ -24,6 +24,7 @@
         .input-field:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px #1e40af; }
         .hidden { display: none; }
         .status-green { color: #22c55e; } .status-red { color: #ef4444; }
+        .achieved-row { background-color: #22c55e; color: #111827; font-weight: bold; }
     </style>
 </head>
 <body class="p-4 md:p-8">
@@ -249,13 +250,14 @@
                 let rows = "";
                 let bankrollForProjection = metasDiarias[0]?.banca_inicial || currentBanca.valor_inicial;
                 metasDiarias.forEach(meta => {
+                    const isAchieved = meta.status === 'concluida';
                     rows += `
-                        <tr class="bg-green-900/50">
+                        <tr class="${isAchieved ? 'achieved-row' : ''}">
                             <td class="p-3 text-sm text-gray-400">${new Date(meta.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
                             <td class="p-3 text-right">${formatCurrency(bankrollForProjection)}</td>
                             <td class="p-3 text-right status-green">${formatCurrency(meta.lucro_final)}</td>
                             <td class="p-3 text-right font-semibold">${formatCurrency(meta.banca_final)}</td>
-                            <td class="p-3 text-center"><span class="status-green font-semibold">Alcançado ✅</span></td>
+                            <td class="p-3 text-center">${isAchieved ? '<span class="status-green font-semibold">Alcançado ✅</span>' : 'Pendente'}</td>
                         </tr>
                     `;
                     bankrollForProjection = meta.banca_final;
@@ -330,6 +332,8 @@
                         const index = metasDiarias.findIndex(m => m.data === todayStr);
                         if (index > -1) metasDiarias[index] = newMeta; else metasDiarias.push(newMeta);
                         renderAll();
+                    } else {
+                        alert('Erro ao fechar ciclo: ' + error.message);
                     }
                 });
                 document.getElementById("new-day-btn")?.addEventListener("click", async () => {
@@ -343,7 +347,6 @@
                         await db.from('bancas').update({ valor_inicial: finalBankroll }).eq('id', currentBanca.id);
                         await db.from('jogadas').delete().eq('banca_id', currentBanca.id);
                         await db.from('metas_diarias').delete().eq('banca_id', currentBanca.id).eq('data', todayStr);
-                        // Recarrega os dados do zero, sem recarregar a página
                         jogadas = [];
                         metasDiarias = metasDiarias.filter(m => m.data !== todayStr);
                         await loadDashboardData();
