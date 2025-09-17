@@ -61,29 +61,28 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // --- INICIALIZAÇÃO E CONEXÃO ---
             const { createClient } = supabase;
             const supabaseUrl = 'https://dekubpsswkfrtotwljvf.supabase.co';
             const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRla3VicHNzd2tmcnRvdHdsanZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgwNzYyOTAsImV4cCI6MjA3MzY1MjI5MH0.Winuq2LIkaGt1sGNXUhi__Q5_AczyxKAYQ_ORABoPTk';
             const db = createClient(supabaseUrl, supabaseKey);
 
-            // --- ESTADO DA APLICAÇÃO ---
             let currentUser = null, currentBanca = null, jogadas = [], metasDiarias = [];
 
-            // --- SELETORES DE ELEMENTOS ---
-            const authContainer = document.getElementById('auth-container'), dashboardContainer = document.getElementById('dashboard-container');
-            const loginForm = document.getElementById('login-form'), registerForm = document.getElementById('register-form');
-            const showRegisterLink = document.getElementById('show-register-link'), showLoginLink = document.getElementById('show-login-link');
-            const authErrorEl = document.getElementById('auth-error'), registerMessageEl = document.getElementById('register-message');
+            const authContainer = document.getElementById('auth-container');
+            const dashboardContainer = document.getElementById('dashboard-container');
+            const loginForm = document.getElementById('login-form');
+            const registerForm = document.getElementById('register-form');
+            const showRegisterLink = document.getElementById('show-register-link');
+            const showLoginLink = document.getElementById('show-login-link');
+            const authErrorEl = document.getElementById('auth-error');
+            const registerMessageEl = document.getElementById('register-message');
 
-            // --- FUNÇÕES AUXILIARES ---
             const formatCurrency = (v) => (v === null || v === undefined ? 0 : v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
             const getLocalDateString = (d) => {
                 const date = d ? new Date(d) : new Date();
                 return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
             };
-            
-            // --- LÓGICA DE DADOS ---
+
             async function loadDashboardData() {
                 if (!currentUser) return;
                 const { data: bancaData, error: bancaError } = await db.from("bancas").select("*").eq("user_id", currentUser.id).single();
@@ -105,7 +104,6 @@
                 renderAll();
             }
 
-            // --- LÓGICA DE RENDERIZAÇÃO ---
             function renderAll() {
                 if (!currentBanca) {
                     dashboardContainer.innerHTML = `<p class="text-center text-red-500">Não foi possível carregar os dados da sua banca.</p>`;
@@ -128,17 +126,9 @@
                     <div id="projection-container" class="card mb-8"></div>
                 `;
                 renderMetrics(); renderSettings(); renderDailyGoal(); renderBetForm(); renderBets(); renderProjection();
-                setupEvents(); // Configura eventos depois que tudo foi renderizado
+                setupEvents();
             }
 
-            function renderMetrics() { /* ... código ... */ }
-            function renderSettings() { /* ... código ... */ }
-            function renderDailyGoal() { /* ... código ... */ }
-            function renderBetForm() { /* ... código ... */ }
-            function renderBets() { /* ... código ... */ }
-            function renderProjection() { /* ... código ... */ }
-
-            // ... Funções de renderização completas ...
             function renderMetrics() {
                 const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
                 const totalStaked = jogadas.reduce((acc, j) => acc + j.valor_apostado, 0);
@@ -251,7 +241,7 @@
             }
             function renderProjection() {
                 let rows = "";
-                let bankrollForProjection = metasDiarias.length > 0 ? metasDiarias[0].banca_inicial : currentBanca.valor_inicial;
+                let bankrollForProjection = metasDiarias[0]?.banca_inicial || currentBanca.valor_inicial;
                 
                 metasDiarias.forEach(meta => {
                     rows += `
@@ -269,8 +259,7 @@
                 const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
                 bankrollForProjection += cycleProfit;
 
-                const remainingDays = 15;
-                for (let i = 0; i < remainingDays; i++) {
+                for (let i = 0; i < 15; i++) {
                     const lastDate = metasDiarias.length > 0 ? new Date(metasDiarias[metasDiarias.length - 1].data + 'T00:00:00') : new Date(new Date().setDate(new Date().getDate() - 1));
                     const date = new Date(lastDate); date.setDate(lastDate.getDate() + i + 1);
                     const initialProjected = bankrollForProjection;
@@ -300,7 +289,7 @@
 
             // --- CONFIGURAÇÃO DOS EVENTOS ---
             function setupEvents() {
-                document.getElementById("logout-btn")?.addEventListener("click", async () => { await logout(); location.reload(); });
+                document.getElementById("logout-btn")?.addEventListener("click", async () => { await db.auth.signOut(); location.reload(); });
                 document.getElementById("save-settings-btn")?.addEventListener("click", async () => {
                     const newBankroll = parseFloat(document.getElementById('bankroll-input').value);
                     const newGoal = parseFloat(document.getElementById('daily-goal-input').value);
@@ -371,17 +360,17 @@
             }
 
             // --- LÓGICA DE AUTENTICAÇÃO INICIAL ---
-            loginForm.addEventListener("submit", async (e) => { e.preventDefault(); authErrorEl.textContent = ''; const email = document.getElementById('login-email').value; const password = document.getElementById('login-password').value; const { error } = await _supabase.auth.signInWithPassword({ email, password }); if (error) { authErrorEl.textContent = 'Email ou senha inválidos.'; } else { location.reload(); } });
-            registerForm.addEventListener("submit", async (e) => { e.preventDefault(); registerMessageEl.textContent = ''; const email = document.getElementById('register-email').value; const password = document.getElementById('register-password').value; const { error } = await _supabase.auth.signUp({ email, password }); if (error) { alert(`Erro ao cadastrar: ${error.message}`); } else { registerMessageEl.textContent = 'Cadastro realizado! Verifique seu e-mail para confirmar a conta.'; } });
+            loginForm.addEventListener("submit", async (e) => { e.preventDefault(); authErrorEl.textContent = ''; const email = document.getElementById('login-email').value; const password = document.getElementById('login-password').value; const { error } = await db.auth.signInWithPassword({ email, password }); if (error) { authErrorEl.textContent = 'Email ou senha inválidos.'; } else { location.reload(); } });
+            registerForm.addEventListener("submit", async (e) => { e.preventDefault(); registerMessageEl.textContent = ''; const email = document.getElementById('register-email').value; const password = document.getElementById('register-password').value; const { error } = await db.auth.signUp({ email, password }); if (error) { alert(`Erro ao cadastrar: ${error.message}`); } else { registerMessageEl.textContent = 'Cadastro realizado! Verifique seu e-mail para confirmar a conta.'; } });
             showRegisterLink.addEventListener("click", (e) => { e.preventDefault(); document.getElementById("login-view").classList.add("hidden"); document.getElementById("register-view").classList.remove("hidden"); });
             showLoginLink.addEventListener("click", (e) => { e.preventDefault(); document.getElementById("register-view").classList.add("hidden"); document.getElementById("login-view").classList.remove("hidden"); });
 
             const checkUserSession = async () => {
-                const { data: { session } } = await _supabase.auth.getSession();
+                const { data: { session } } = await db.auth.getSession();
                 if (session) {
                     currentUser = session.user;
                     authContainer.classList.add("hidden"); dashboardContainer.classList.remove("hidden");
-                    await loadDashboard(currentUser);
+                    await loadDashboardData();
                 } else {
                     dashboardContainer.classList.add("hidden"); authContainer.classList.remove("hidden");
                 }
