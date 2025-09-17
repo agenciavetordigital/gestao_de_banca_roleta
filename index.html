@@ -365,6 +365,7 @@
                 }
             });
             
+            // ### LÓGICA DO BOTÃO 'COMEÇAR NOVO DIA' CORRIGIDA ###
             newDayBtn.addEventListener('click', async () => {
                 newDayBtn.disabled = true;
                 newDayBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Iniciando...';
@@ -375,19 +376,21 @@
                     
                     const finalBankroll = todayMeta.banca_final;
                     
+                    // Passo 1: Atualiza a banca com o valor final
                     const { error: updateError } = await _supabase.from('bancas').update({ valor_inicial: finalBankroll }).eq('id', currentBanca.id);
                     if (updateError) throw updateError;
 
-                    // DELETAR APENAS AS JOGADAS DO DIA QUE FOI FECHADO
-                    const { error: deleteError } = await _supabase.from('jogadas').delete().eq('banca_id', currentBanca.id).gte('data_jogada', todayStr).lt('data_jogada', getLocalDateString(new Date(new Date(todayStr).setDate(new Date(todayStr).getDate() + 1))));
-                    if (deleteError) throw deleteError;
+                    // Passo 2: Apaga as jogadas do ciclo que acabou
+                    const { error: deletePlaysError } = await _supabase.from('jogadas').delete().eq('banca_id', currentBanca.id);
+                    if (deletePlaysError) throw deletePlaysError;
 
-                    // DELETAR O REGISTRO DA META DIÁRIA PARA PERMITIR UM NOVO CICLO
+                    // Passo 3: Apaga o registro da meta diária para reiniciar o ciclo
                     const { error: deleteMetaError } = await _supabase.from('metas_diarias').delete().eq('id', todayMeta.id);
                     if (deleteMetaError) throw deleteMetaError;
 
                     location.reload();
                 } catch (error) {
+                    console.error("Erro ao iniciar novo dia:", error);
                     alert('Ocorreu um erro ao iniciar o novo dia: ' + error.message);
                     newDayBtn.disabled = false;
                     newDayBtn.innerHTML = '<i class="fas fa-redo-alt mr-2"></i>Começar Novo Dia de Metas';
