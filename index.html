@@ -222,8 +222,9 @@
                 const todayMeta = metasDiarias.find(m => m.data === todayStr);
                 const todayProfit = getTodaysProfit();
                 
-                // ### LÓGICA CORRIGIDA ###
-                // O dia está fechado se existe uma meta concluída para hoje E AINDA não começamos um novo ciclo (lucro de hoje diferente de zero).
+                // ### LÓGICA CORRIGIDA E FINAL ###
+                // O dia está 'fechado' se existir um registro de meta concluída para hoje
+                // E o lucro de hoje for igual ao lucro salvo (ou seja, nenhuma nova aposta foi feita)
                 const dayIsClosed = todayMeta && todayMeta.status === 'concluida' && todayProfit.toFixed(2) === todayMeta.lucro_final.toFixed(2);
                 
                 const startOfDayBankroll = getBankrollAtStartOfDay(todayStr);
@@ -369,7 +370,7 @@
                 }
             });
             
-            // ### LÓGICA DO BOTÃO 'COMEÇAR NOVO DIA' CORRIGIDA E SIMPLIFICADA ###
+            // ### LÓGICA DO BOTÃO 'COMEÇAR NOVO DIA' CORRIGIDA E FINAL ###
             newDayBtn.addEventListener('click', async () => {
                 newDayBtn.disabled = true;
                 newDayBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Iniciando...';
@@ -380,18 +381,16 @@
                     
                     const finalBankroll = todayMeta.banca_final;
                     
-                    // Passo 1: Atualiza a banca com o valor final
+                    // Passo 1: Atualiza a banca com o valor final do ciclo anterior
                     const { error: updateError } = await _supabase.from('bancas').update({ valor_inicial: finalBankroll }).eq('id', currentBanca.id);
                     if (updateError) throw updateError;
 
-                    // Passo 2: Apaga as jogadas do ciclo que acabou
-                    const { error: deletePlaysError } = await _supabase.from('jogadas').delete().eq('banca_id', currentBanca.id);
-                    if (deletePlaysError) throw deletePlaysError;
-                    
-                    // Passo 3: Opcional, mas recomendado: Apaga a meta concluída para não poluir a projeção
-                    // Se quiser manter o histórico de todos os ciclos, comente a linha abaixo
-                    const { error: deleteMetaError } = await _supabase.from('metas_diarias').delete().eq('id', todayMeta.id);
-                    if(deleteMetaError) throw deleteMetaError;
+                    // Passo 2: Apaga as jogadas do ciclo que acabou para zerar o 'Lucro de Hoje'
+                    const todaysPlaysIds = jogadas.filter(j => getLocalDateString(j.data_jogada) === todayStr).map(j => j.id);
+                    if (todaysPlaysIds.length > 0) {
+                        const { error: deletePlaysError } = await _supabase.from('jogadas').delete().in('id', todaysPlaysIds);
+                        if (deletePlaysError) throw deletePlaysError;
+                    }
 
                     location.reload();
                 } catch (error) {
