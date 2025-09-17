@@ -1,4 +1,4 @@
-import { checkUserSession, login, register, logout } from "./auth.js";
+import { checkUserSession, login, register } from "./auth.js";
 import { loadDashboard } from "./dashboard.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -10,13 +10,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   const showLoginLink = document.getElementById("show-login-link");
   const authErrorEl = document.getElementById("auth-error");
   const registerMessageEl = document.getElementById("register-message");
-  
+
   const user = await checkUserSession();
   
   if (user) {
     authContainer.classList.add("hidden");
     dashboardContainer.classList.remove("hidden");
-    await loadDashboard(user, logout);
+    await loadDashboard(user);
   } else {
     dashboardContainer.classList.add("hidden");
     authContainer.classList.remove("hidden");
