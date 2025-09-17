@@ -6,29 +6,25 @@ document.addEventListener("DOMContentLoaded", async () => {
   const dashboardContainer = document.getElementById("dashboard-container");
   const loginForm = document.getElementById("login-form");
   const registerForm = document.getElementById("register-form");
-  const logoutBtn = document.getElementById("logout-btn");
   const showRegisterLink = document.getElementById("show-register-link");
   const showLoginLink = document.getElementById("show-login-link");
   const authErrorEl = document.getElementById("auth-error");
   const registerMessageEl = document.getElementById("register-message");
-  const userEmailDisplay = document.getElementById("user-email-display");
 
-  // Verificar sessão do usuário
+  // O botão de logout só existe depois que o dashboard é renderizado
+  // então o evento dele será configurado no dashboard.js
+  
   const user = await checkUserSession();
   
   if (user) {
-    // Se o usuário está logado, esconde a autenticação e carrega o dashboard
     authContainer.classList.add("hidden");
     dashboardContainer.classList.remove("hidden");
-    userEmailDisplay.textContent = `Logado como: ${user.email}`;
-    await loadDashboard(user); // << ESSA LINHA FOI RESTAURADA
+    await loadDashboard(user);
   } else {
-    // Se não está logado, mostra a tela de autenticação
     dashboardContainer.classList.add("hidden");
     authContainer.classList.remove("hidden");
   }
 
-  // Evento de Login
   loginForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     authErrorEl.textContent = "";
@@ -42,7 +38,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
-  // Evento de Registro
   registerForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     registerMessageEl.textContent = "";
@@ -55,14 +50,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       registerMessageEl.textContent = "Cadastro realizado! Verifique seu e-mail para confirmar a conta.";
     }
   });
-
-  // Evento de Logout
-  logoutBtn.addEventListener("click", async () => {
-    await logout();
-    location.reload();
-  });
-
-  // Links para alternar entre login e registro
+  
   showRegisterLink.addEventListener("click", (e) => {
     e.preventDefault();
     document.getElementById("login-view").classList.add("hidden");
