@@ -263,7 +263,8 @@
                     bankrollForProjection = meta.banca_final;
                 });
                 const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
-                bankrollForProjection += cycleProfit;
+                const currentProjectedBankroll = bankrollForProjection + cycleProfit;
+                bankrollForProjection = currentProjectedBankroll;
                 for (let i = 0; i < 15; i++) {
                     const lastDate = metasDiarias.length > 0 ? new Date(metasDiarias[metasDiarias.length - 1].data + 'T00:00:00') : new Date(new Date().setDate(new Date().getDate() - 1));
                     const date = new Date(lastDate); date.setDate(lastDate.getDate() + i + 1);
@@ -327,21 +328,13 @@
                     const todayStr = getLocalDateString();
                     const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
                     const finalBankroll = currentBanca.valor_inicial + cycleProfit;
-                    const { data: newMeta, error } = await db.from('metas_diarias').upsert({ 
-                        user_id: currentUser.id, 
-                        banca_id: currentBanca.id, 
-                        data: todayStr, 
-                        status: 'concluida', 
-                        lucro_final: cycleProfit, 
-                        banca_final: finalBankroll, 
-                        banca_inicial: currentBanca.valor_inicial 
-                    }, { onConflict: 'banca_id, data' }).select().single();
-                    if (error) {
-                        alert('Erro ao fechar ciclo: ' + error.message);
-                    } else {
+                    const { data: newMeta, error } = await db.from('metas_diarias').upsert({ user_id: currentUser.id, banca_id: currentBanca.id, data: todayStr, status: 'concluida', lucro_final: cycleProfit, banca_final: finalBankroll, banca_inicial: currentBanca.valor_inicial }, { onConflict: 'banca_id, data' }).select().single();
+                    if (!error) {
                         const index = metasDiarias.findIndex(m => m.data === todayStr);
                         if (index > -1) metasDiarias[index] = newMeta; else metasDiarias.push(newMeta);
                         renderAll();
+                    } else {
+                        alert('Erro ao fechar ciclo: ' + error.message);
                     }
                 });
                 document.getElementById("new-day-btn")?.addEventListener("click", async () => {
@@ -354,12 +347,10 @@
                         const finalBankroll = currentBanca.valor_inicial + cycleProfit;
                         await db.from('bancas').update({ valor_inicial: finalBankroll }).eq('id', currentBanca.id);
                         await db.from('jogadas').delete().eq('banca_id', currentBanca.id);
-                        await db.from('metas_diarias').delete().eq('banca_id', currentBanca.id).eq('data', todayStr);
+                        // Não deleta a meta do dia, apenas reseta jogadas e banca
                         jogadas = [];
-                        metasDiarias = metasDiarias.filter(m => m.data !== todayStr);
-                        await loadDashboardData();
-                        btn.disabled = false;
-                        btn.innerHTML = '<i class="fas fa-redo-alt mr-2"></i>Começar Novo Ciclo';
+                        currentBanca.valor_inicial = finalBankroll;
+                        renderAll();
                     } catch (error) {
                         alert('Ocorreu um erro: ' + error.message);
                         btn.disabled = false;
