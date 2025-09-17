@@ -61,128 +61,94 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            if (!window.supabase) {
-                console.error('Erro: Biblioteca Supabase não carregada.');
-                alert('Erro ao carregar o Supabase. Verifique sua conexão ou tente novamente mais tarde.');
-                return;
-            }
+            // --- INICIALIZAÇÃO E CONEXÃO ---
             const { createClient } = supabase;
-            // Para produção no Vercel, configure variáveis de ambiente no painel do Vercel e use um build step para injetar.
-            const supabaseUrl = process.env.SUPABASE_URL || 'https://dekubpsswkfrtotwljvf.supabase.co';
-const supabaseKey = process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRla3VicHNzd2tmcnRvdHdsanZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgwNzYyOTAsImV4cCI6MjA3MzY1MjI5MH0.Winuq2LIkaGt1sGNXUhi__Q5_AczyxKAYQ_ORABoPTk';
-const db = createClient(supabaseUrl, supabaseKey);
-            const state = {
-                currentUser: null,
-                currentBanca: null,
-                jogadas: [],
-                metasDiarias: []
-            };
+            const supabaseUrl = 'https://dekubpsswkfrtotwljvf.supabase.co';
+            const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRla3VicHNzd2tmcnRvdHdsanZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgwNzYyOTAsImV4cCI6MjA3MzY1MjI5MH0.Winuq2LIkaGt1sGNXUhi__Q5_AczyxKAYQ_ORABoPTk';
+            const db = createClient(supabaseUrl, supabaseKey);
 
-            let isRendering = false;
+            // --- ESTADO DA APLICAÇÃO ---
+            let currentUser = null, currentBanca = null, jogadas = [], metasDiarias = [];
 
+            // --- SELETORES GLOBAIS ---
             const authContainer = document.getElementById('auth-container'), dashboardContainer = document.getElementById('dashboard-container');
             const loginForm = document.getElementById('login-form'), registerForm = document.getElementById('register-form');
             const showRegisterLink = document.getElementById('show-register-link'), showLoginLink = document.getElementById('show-login-link');
             const authErrorEl = document.getElementById('auth-error'), registerMessageEl = document.getElementById('register-message');
 
+            // --- FUNÇÕES AUXILIARES ---
             const formatCurrency = (v) => (v === null || v === undefined ? 0 : v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
             const getLocalDateString = (d) => {
                 const date = d ? new Date(d) : new Date();
                 return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
             };
+            
+            // --- LÓGICA DE DADOS ---
+            async function loadDashboardData() {
+                if (!currentUser) return;
+                const { data: bancaData, error: bancaError } = await db.from("bancas").select("*").eq("user_id", currentUser.id).single();
+                if(bancaData) currentBanca = bancaData;
+                else if (!bancaError || bancaError.code === 'PGRST116') {
+                    const { data: newBanca } = await db.from("bancas").insert({ user_id: currentUser.id, nome_banca: "Banca Principal", valor_inicial: 100, meta_diaria_percentual: 25 }).select().single();
+                    currentBanca = newBanca;
+                } else console.error("Erro ao carregar banca:", bancaError);
+                if (!currentBanca) return;
 
-            function updateState(newState) {
-                Object.assign(state, newState);
+                const [jogadasRes, metasRes] = await Promise.all([
+                    db.from("jogadas").select("*").eq("banca_id", currentBanca.id).order("data_jogada", { ascending: false }),
+                    db.from("metas_diarias").select("*").eq("banca_id", currentBanca.id).order("data", { ascending: true })
+                ]);
+                jogadas = jogadasRes.data || [];
+                metasDiarias = metasRes.data || [];
                 renderAll();
             }
 
-            async function loadDashboardData() {
-                if (!state.currentUser) {
-                    alert('Usuário não autenticado. Faça login novamente.');
-                    return;
-                }
-                try {
-                    const { data: bancaData, error: bancaError } = await db.from("bancas").select("*").eq("user_id", state.currentUser.id).single();
-                    if (bancaData) {
-                        updateState({ currentBanca: bancaData });
-                    } else if (!bancaError || bancaError.code === 'PGRST116') {
-                        const { data: newBanca, error: insertError } = await db.from("bancas").insert({
-                            user_id: state.currentUser.id,
-                            nome_banca: "Banca Principal",
-                            valor_inicial: 100,
-                            meta_diaria_percentual: 25
-                        }).select().single();
-                        if (insertError) throw new Error('Erro ao criar nova banca: ' + insertError.message);
-                        updateState({ currentBanca: newBanca });
-                    } else {
-                        throw new Error('Erro ao carregar banca: ' + bancaError.message);
-                    }
-                    if (!state.currentBanca) throw new Error('Não foi possível carregar ou criar a banca.');
-
-                    const [jogadasRes, metasRes] = await Promise.all([
-                        db.from("jogadas").select("*").eq("banca_id", state.currentBanca.id).order("data_jogada", { ascending: false }),
-                        db.from("metas_diarias").select("*").eq("banca_id", state.currentBanca.id).order("data", { ascending: true })
-                    ]);
-                    if (jogadasRes.error) throw new Error('Erro ao carregar jogadas: ' + jogadasRes.error.message);
-                    if (metasRes.error) throw new Error('Erro ao carregar metas: ' + metasRes.error.message);
-                    updateState({ jogadas: jogadasRes.data || [], metasDiarias: metasRes.data || [] });
-                } catch (error) {
-                    console.error(error);
-                    dashboardContainer.innerHTML = `<p class="text-center text-red-500">Erro ao carregar dados: ${error.message}. Tente novamente.</p>`;
-                }
-            }
-
+            // --- LÓGICA DE RENDERIZAÇÃO ---
             function renderAll() {
-                if (isRendering) return;
-                isRendering = true;
-                requestAnimationFrame(() => {
-                    try {
-                        if (!state.currentBanca) {
-                            dashboardContainer.innerHTML = `<p class="text-center text-red-500">Não foi possível carregar dados.</p>`;
-                            return;
-                        }
-                        if (document.getElementById('dashboard-container').innerHTML.trim() === '') {
-                            dashboardContainer.innerHTML = `
-                                <header class="mb-8 flex flex-wrap justify-between items-center gap-4">
-                                    <div><h1 class="text-3xl md:text-4xl font-bold text-white"><i class="fas fa-compact-disc mr-3 text-red-500"></i>Gestão de Banca</h1><p id="user-email-display" class="text-gray-400 mt-2 text-sm">Logado como: ${state.currentUser.email}</p></div>
-                                    <button id="logout-btn" class="btn btn-red"><i class="fas fa-sign-out-alt mr-2"></i>Logout</button>
-                                </header>
-                                <section id="metrics-container" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8"></section>
-                                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-                                    <div class="lg:col-span-1 space-y-8">
-                                        <div id="settings-container" class="card"></div>
-                                        <div id="daily-goal-container" class="card"></div>
-                                        <div id="bet-form-container" class="card"></div>
-                                    </div>
-                                    <div id="bets-history-container" class="lg:col-span-2 card"></div>
-                                </div>
-                                <div id="projection-container" class="card mb-8"></div>
-                            `;
-                        }
-                        renderMetrics();
-                        renderSettings();
-                        renderDailyGoal();
-                        renderBetForm();
-                        renderBets();
-                        renderProjection();
-                        setupEvents();
-                    } finally {
-                        isRendering = false;
-                    }
-                });
+                if (!currentBanca) { dashboardContainer.innerHTML = `<p class="text-center text-red-500">Não foi possível carregar dados.</p>`; return; }
+                
+                // Renderiza a estrutura principal do dashboard
+                dashboardContainer.innerHTML = `
+                    <header class="mb-8 flex flex-wrap justify-between items-center gap-4">
+                        <div><h1 class="text-3xl md:text-4xl font-bold text-white"><i class="fas fa-compact-disc mr-3 text-red-500"></i>Gestão de Banca</h1><p class="text-gray-400 mt-2 text-sm">Logado como: ${currentUser.email}</p></div>
+                        <button id="logout-btn" class="btn btn-red"><i class="fas fa-sign-out-alt mr-2"></i>Logout</button>
+                    </header>
+                    <section id="metrics-container" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8"></section>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+                        <div class="lg:col-span-1 space-y-8">
+                            <div id="settings-container" class="card"></div>
+                            <div id="daily-goal-container" class="card"></div>
+                            <div id="bet-form-container" class="card"></div>
+                        </div>
+                        <div id="bets-history-container" class="lg:col-span-2 card"></div>
+                    </div>
+                    <div id="projection-container" class="card mb-8"></div>
+                `;
+                
+                // Renderiza os componentes individuais
+                renderMetrics(); 
+                renderSettings(); 
+                renderDailyGoal(); 
+                renderBetForm(); 
+                renderBets(); 
+                renderProjection();
+                
+                // Configura os eventos para os elementos recém-criados
+                setupEvents();
             }
 
             function renderMetrics() {
-                const cycleProfit = state.jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
-                const totalStaked = state.jogadas.reduce((acc, j) => acc + j.valor_apostado, 0);
-                const wonPlays = state.jogadas.filter(j => j.retorno > j.valor_apostado).length;
-                const currentBankroll = state.currentBanca.valor_inicial + cycleProfit;
+                const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
+                const totalStaked = jogadas.reduce((acc, j) => acc + j.valor_apostado, 0);
+                const wonPlays = jogadas.filter(j => j.retorno > j.valor_apostado).length;
+                const currentBankroll = currentBanca.valor_inicial + cycleProfit;
                 let totalProfitAllTime = cycleProfit;
-                state.metasDiarias.forEach(meta => { totalProfitAllTime += meta.lucro_final; });
+                metasDiarias.forEach(meta => { totalProfitAllTime += meta.lucro_final; });
                 const roi = totalStaked > 0 ? (cycleProfit / totalStaked) * 100 : 0;
-                const winRate = state.jogadas.length > 0 ? (wonPlays / state.jogadas.length) * 100 : 0;
+                const winRate = jogadas.length > 0 ? (wonPlays / jogadas.length) * 100 : 0;
+
                 document.getElementById('metrics-container').innerHTML = `
-                    <div class="card"><h3 class="text-sm font-medium text-gray-400">BANCA INICIAL</h3><p class="text-2xl font-semibold mt-2">${formatCurrency(state.metasDiarias[0]?.banca_inicial || state.currentBanca.valor_inicial)}</p></div>
+                    <div class="card"><h3 class="text-sm font-medium text-gray-400">BANCA INICIAL</h3><p class="text-2xl font-semibold mt-2">${formatCurrency(metasDiarias[0]?.banca_inicial || currentBanca.valor_inicial)}</p></div>
                     <div class="card"><h3 class="text-sm font-medium text-gray-400">BANCA ATUAL</h3><p class="text-2xl font-semibold mt-2">${formatCurrency(currentBankroll)}</p></div>
                     <div class="card"><h3 class="text-sm font-medium text-gray-400">LUCRO TOTAL</h3><p class="text-2xl font-semibold mt-2">${formatCurrency(totalProfitAllTime)}</p></div>
                     <div class="card"><h3 class="text-sm font-medium text-gray-400">ROI DO CICLO</h3><p class="text-2xl font-semibold mt-2">${roi.toFixed(2)}%</p></div>
@@ -193,18 +159,18 @@ const db = createClient(supabaseUrl, supabaseKey);
                 document.getElementById('settings-container').innerHTML = `
                     <h2 class="text-xl font-bold mb-4">Configurações</h2>
                     <div class="space-y-4">
-                        <div><label for="bankroll-input" class="block text-sm font-medium text-gray-300 mb-2">Banca Inicial do Ciclo (R$)</label><input type="number" id="bankroll-input" value="${state.currentBanca.valor_inicial}" class="input-field"></div>
-                        <div><label for="daily-goal-input" class="block text-sm font-medium text-gray-300 mb-2">Meta de Lucro (%)</label><input type="number" id="daily-goal-input" value="${state.currentBanca.meta_diaria_percentual}" class="input-field"></div>
+                        <div><label for="bankroll-input" class="block text-sm font-medium text-gray-300 mb-2">Banca Inicial do Ciclo (R$)</label><input type="number" id="bankroll-input" value="${currentBanca.valor_inicial}" class="input-field"></div>
+                        <div><label for="daily-goal-input" class="block text-sm font-medium text-gray-300 mb-2">Meta de Lucro (%)</label><input type="number" id="daily-goal-input" value="${currentBanca.meta_diaria_percentual}" class="input-field"></div>
                         <button id="save-settings-btn" class="btn btn-primary w-full"><i class="fas fa-save mr-2"></i>Salvar Configurações</button>
                     </div>
                 `;
             }
             function renderDailyGoal() {
                 const todayStr = getLocalDateString();
-                const todayMeta = state.metasDiarias.find(m => m.data === todayStr);
-                const cycleProfit = state.jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
-                const startOfCycleBankroll = state.currentBanca.valor_inicial;
-                const targetProfit = state.currentBanca.meta_diaria_percentual > 0 ? startOfCycleBankroll * (state.currentBanca.meta_diaria_percentual / 100) : 0;
+                const todayMeta = metasDiarias.find(m => m.data === todayStr);
+                const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
+                const startOfCycleBankroll = currentBanca.valor_inicial;
+                const targetProfit = currentBanca.meta_diaria_percentual > 0 ? startOfCycleBankroll * (currentBanca.meta_diaria_percentual / 100) : 0;
                 const dayIsClosed = todayMeta && todayMeta.status === 'concluida';
 
                 document.getElementById('daily-goal-container').innerHTML = `
@@ -246,14 +212,14 @@ const db = createClient(supabaseUrl, supabaseKey);
                     </form>
                 `;
                 const todayStr = getLocalDateString();
-                const todayMeta = state.metasDiarias.find(m => m.data === todayStr);
+                const todayMeta = metasDiarias.find(m => m.data === todayStr);
                 if (todayMeta && todayMeta.status === 'concluida') {
                     document.getElementById('add-bet-form').querySelectorAll('input, button').forEach(el => el.disabled = true);
                 }
             }
             function renderBets() {
                 let rows = "";
-                state.jogadas.forEach(bet => {
+                jogadas.forEach(bet => {
                     const profit = bet.retorno - bet.valor_apostado;
                     rows += `
                         <tr class="border-b border-gray-800 hover:bg-gray-700/50">
@@ -281,9 +247,8 @@ const db = createClient(supabaseUrl, supabaseKey);
             }
             function renderProjection() {
                 let rows = "";
-                let bankrollForProjection = state.metasDiarias[0]?.banca_inicial || state.currentBanca.valor_inicial;
-
-                state.metasDiarias.forEach(meta => {
+                let bankrollForProjection = metasDiarias[0]?.banca_inicial || currentBanca.valor_inicial;
+                metasDiarias.forEach(meta => {
                     rows += `
                         <tr class="bg-green-900/50">
                             <td class="p-3 text-sm text-gray-400">${new Date(meta.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
@@ -295,20 +260,13 @@ const db = createClient(supabaseUrl, supabaseKey);
                     `;
                     bankrollForProjection = meta.banca_final;
                 });
-
-                const cycleProfit = state.jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
-                const currentDayBankroll = state.currentBanca.valor_inicial + cycleProfit;
-
-                let projectionStartBankroll = state.metasDiarias.length > 0 ? state.metasDiarias[state.metasDiarias.length - 1].banca_final : state.currentBanca.valor_inicial;
-                if (state.jogadas.length > 0) {
-                    projectionStartBankroll = currentDayBankroll;
-                }
-
+                const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
+                bankrollForProjection += cycleProfit;
                 for (let i = 0; i < 15; i++) {
-                    const lastDate = state.metasDiarias.length > 0 ? new Date(state.metasDiarias[state.metasDiarias.length - 1].data + 'T00:00:00') : new Date(new Date().setDate(new Date().getDate() - 1));
+                    const lastDate = metasDiarias.length > 0 ? new Date(metasDiarias[metasDiarias.length - 1].data + 'T00:00:00') : new Date(new Date().setDate(new Date().getDate() - 1));
                     const date = new Date(lastDate); date.setDate(lastDate.getDate() + i + 1);
                     const initialProjected = bankrollForProjection;
-                    const goal = state.currentBanca.meta_diaria_percentual > 0 ? initialProjected * (state.currentBanca.meta_diaria_percentual / 100) : 0;
+                    const goal = currentBanca.meta_diaria_percentual > 0 ? initialProjected * (currentBanca.meta_diaria_percentual / 100) : 0;
                     const finalProjected = initialProjected + goal;
                     rows += `
                         <tr>
@@ -332,123 +290,76 @@ const db = createClient(supabaseUrl, supabaseKey);
                 `;
             }
 
+            // --- CONFIGURAÇÃO DOS EVENTOS ---
             function setupEvents() {
-                const logoutBtn = document.getElementById("logout-btn");
-                if (logoutBtn && !logoutBtn.dataset.listener) {
-                    logoutBtn.dataset.listener = 'true';
-                    logoutBtn.addEventListener("click", async () => { await db.auth.signOut(); location.reload(); });
-                }
-
-                const saveSettingsBtn = document.getElementById("save-settings-btn");
-                if (saveSettingsBtn && !saveSettingsBtn.dataset.listener) {
-                    saveSettingsBtn.dataset.listener = 'true';
-                    saveSettingsBtn.addEventListener("click", async () => {
-                        const newBankroll = parseFloat(document.getElementById('bankroll-input').value);
-                        const newGoal = parseFloat(document.getElementById('daily-goal-input').value);
-                        if (isNaN(newBankroll) || isNaN(newGoal)) { return alert('Valores inválidos.'); }
-                        const { data, error } = await db.from('bancas').update({ valor_inicial: newBankroll, meta_diaria_percentual: newGoal }).eq('id', state.currentBanca.id).select().single();
-                        if (error) { alert('Erro ao salvar: ' + error.message); } else { updateState({ currentBanca: data }); alert('Configurações salvas!'); }
-                    });
-                }
-
-                const addBetForm = document.getElementById("add-bet-form");
-                if (addBetForm && !addBetForm.dataset.listener) {
-                    addBetForm.dataset.listener = 'true';
-                    addBetForm.addEventListener("submit", async (e) => {
-                        e.preventDefault();
-                        const outcome = e.submitter.name;
-                        const chipValue = parseFloat(document.getElementById('chip-value').value) || 0;
-                        const numbersCovered = parseInt(document.getElementById('numbers-covered').value) || 0;
-                        const zeroStake = parseFloat(document.getElementById('zero-stake').value) || 0;
-
-                        if (chipValue < 0 || numbersCovered < 0 || zeroStake < 0) {
-                            alert('Valores não podem ser negativos.');
-                            return;
+                document.getElementById("logout-btn")?.addEventListener("click", async () => { await db.auth.signOut(); location.reload(); });
+                document.getElementById("save-settings-btn")?.addEventListener("click", async () => {
+                    const newBankroll = parseFloat(document.getElementById('bankroll-input').value);
+                    const newGoal = parseFloat(document.getElementById('daily-goal-input').value);
+                    if (isNaN(newBankroll) || isNaN(newGoal)) { return alert('Valores inválidos.'); }
+                    const { data, error } = await db.from('bancas').update({ valor_inicial: newBankroll, meta_diaria_percentual: newGoal }).eq('id', currentBanca.id).select().single();
+                    if (error) { alert('Erro ao salvar: ' + error.message); } else { currentBanca = data; alert('Configurações salvas!'); renderAll(); }
+                });
+                document.getElementById("add-bet-form")?.addEventListener("submit", async (e) => {
+                    e.preventDefault();
+                    const outcome = e.submitter.name;
+                    const chipValue = parseFloat(document.getElementById('chip-value').value) || 0;
+                    const numbersCovered = parseInt(document.getElementById('numbers-covered').value) || 0;
+                    const zeroStake = parseFloat(document.getElementById('zero-stake').value) || 0;
+                    if (outcome === 'win_number' && (chipValue <= 0 || numbersCovered <= 0)) { return alert('Preencha os campos corretamente.'); }
+                    const totalStake = (chipValue * numbersCovered) + zeroStake;
+                    let result = 0, status = '';
+                    if (outcome === 'win_number') { result = chipValue * 36; status = 'win'; }
+                    else if (outcome === 'win_zero') { result = zeroStake * 36; status = 'win_zero'; }
+                    else if (outcome === 'loss') { result = 0; status = 'loss'; }
+                    if (totalStake <= 0) return alert("Valor apostado inválido.");
+                    const { data: newBet, error } = await db.from('jogadas').insert({ banca_id: currentBanca.id, valor_apostado: totalStake, retorno: result, status: status, estrategia: 'Jogada Manual' }).select().single();
+                    if (error) { alert("Erro ao registrar jogada."); } else { jogadas.unshift(newBet); document.getElementById('add-bet-form').reset(); renderAll(); }
+                });
+                document.getElementById("clear-data-btn")?.addEventListener("click", async () => {
+                    if (!confirm("Tem certeza?")) return;
+                    await db.from("jogadas").delete().eq("banca_id", currentBanca.id);
+                    jogadas = []; renderAll();
+                });
+                document.getElementById("goal-met-btn")?.addEventListener("click", async () => {
+                    const todayStr = getLocalDateString();
+                    const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
+                    const finalBankroll = currentBanca.valor_inicial + cycleProfit;
+                    const { data: newMeta, error } = await db.from('metas_diarias').upsert({ user_id: currentUser.id, banca_id: currentBanca.id, data: todayStr, status: 'concluida', lucro_final: cycleProfit, banca_final: finalBankroll }, { onConflict: 'banca_id, data' }).select().single();
+                    if (!error) {
+                        const index = metasDiarias.findIndex(m => m.data === todayStr);
+                        if (index > -1) metasDiarias[index] = newMeta; else metasDiarias.push(newMeta);
+                        renderAll();
+                    }
+                });
+                document.getElementById("new-day-btn")?.addEventListener("click", async () => {
+                    const btn = document.getElementById("new-day-btn");
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Iniciando...';
+                    try {
+                        const finalBankroll = currentBanca.valor_inicial + jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
+                        await db.from('bancas').update({ valor_inicial: finalBankroll }).eq('id', currentBanca.id);
+                        await db.from('jogadas').delete().eq('banca_id', currentBanca.id);
+                        // Recarrega os dados do zero, sem recarregar a página
+                        jogadas = [];
+                        await loadDashboardData();
+                    } catch (error) {
+                        alert('Ocorreu um erro: ' + error.message);
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-redo-alt mr-2"></i>Começar Novo Ciclo';
+                    }
+                });
+                document.getElementById("bets-history-container")?.addEventListener("click", async (e) => {
+                    if (e.target.closest('.delete-btn')) {
+                        const button = e.target.closest('.delete-btn');
+                        const idToDelete = button.getAttribute('data-id');
+                        if(confirm('Apagar esta jogada?')){
+                            await db.from('jogadas').delete().eq('id', idToDelete);
+                            jogadas = jogadas.filter(j => j.id != idToDelete);
+                            renderAll();
                         }
-                        if (outcome === 'win_number' && (chipValue <= 0 || numbersCovered <= 0)) {
-                            alert('Preencha o valor da ficha e a quantidade de números cobertos corretamente.');
-                            return;
-                        }
-                        if (outcome === 'win_zero' && zeroStake <= 0) {
-                            alert('Preencha o valor da proteção no zero corretamente.');
-                            return;
-                        }
-                        const totalStake = (chipValue * numbersCovered) + zeroStake;
-                        if (totalStake <= 0) {
-                            alert("Valor apostado inválido.");
-                            return;
-                        }
-                        let result = 0, status = '';
-                        if (outcome === 'win_number') { result = chipValue * 36; status = 'win'; }
-                        else if (outcome === 'win_zero') { result = zeroStake * 36; status = 'win_zero'; }
-                        else if (outcome === 'loss') { result = 0; status = 'loss'; }
-                        const { data: newBet, error } = await db.from('jogadas').insert({ banca_id: state.currentBanca.id, valor_apostado: totalStake, retorno: result, status: status, estrategia: 'Jogada Manual' }).select().single();
-                        if (error) { alert("Erro ao registrar jogada: " + error.message); } else { updateState({ jogadas: [newBet, ...state.jogadas] }); document.getElementById('add-bet-form').reset(); }
-                    });
-                }
-
-                const clearDataBtn = document.getElementById("clear-data-btn");
-                if (clearDataBtn && !clearDataBtn.dataset.listener) {
-                    clearDataBtn.dataset.listener = 'true';
-                    clearDataBtn.addEventListener("click", async () => {
-                        if (!confirm("Tem certeza?")) return;
-                        await db.from("jogadas").delete().eq("banca_id", state.currentBanca.id);
-                        updateState({ jogadas: [] });
-                    });
-                }
-
-                const goalMetBtn = document.getElementById("goal-met-btn");
-                if (goalMetBtn && !goalMetBtn.dataset.listener) {
-                    goalMetBtn.dataset.listener = 'true';
-                    goalMetBtn.addEventListener("click", async () => {
-                        const todayStr = getLocalDateString();
-                        const cycleProfit = state.jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
-                        const finalBankroll = state.currentBanca.valor_inicial + cycleProfit;
-                        const { data: newMeta, error } = await db.from('metas_diarias').upsert({ user_id: state.currentUser.id, banca_id: state.currentBanca.id, data: todayStr, status: 'concluida', lucro_final: cycleProfit, banca_final: finalBankroll }, { onConflict: 'banca_id, data' }).select().single();
-                        if (!error) {
-                            const index = state.metasDiarias.findIndex(m => m.data === todayStr);
-                            if (index > -1) state.metasDiarias[index] = newMeta; else state.metasDiarias.push(newMeta);
-                            updateState({ metasDiarias: [...state.metasDiarias] });
-                        } else {
-                            alert('Erro ao fechar ciclo: ' + error.message);
-                        }
-                    });
-                }
-
-                const newDayBtn = document.getElementById("new-day-btn");
-                if (newDayBtn && !newDayBtn.dataset.listener) {
-                    newDayBtn.dataset.listener = 'true';
-                    newDayBtn.addEventListener("click", async () => {
-                        const btn = document.getElementById("new-day-btn");
-                        btn.disabled = true;
-                        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Iniciando...';
-                        try {
-                            const finalBankroll = state.currentBanca.valor_inicial + state.jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
-                            await db.from('bancas').update({ valor_inicial: finalBankroll }).eq('id', state.currentBanca.id);
-                            await db.from('jogadas').delete().eq('banca_id', state.currentBanca.id);
-                            location.reload();
-                        } catch (error) {
-                            alert('Ocorreu um erro: ' + error.message);
-                            btn.disabled = false;
-                            btn.innerHTML = '<i class="fas fa-redo-alt mr-2"></i>Começar Novo Ciclo';
-                        }
-                    });
-                }
-
-                const betsHistoryContainer = document.getElementById("bets-history-container");
-                if (betsHistoryContainer && !betsHistoryContainer.dataset.listener) {
-                    betsHistoryContainer.dataset.listener = 'true';
-                    betsHistoryContainer.addEventListener("click", async (e) => {
-                        if (e.target.closest('.delete-btn')) {
-                            const button = e.target.closest('.delete-btn');
-                            const idToDelete = button.getAttribute('data-id');
-                            if(confirm('Apagar esta jogada?')){
-                                await db.from('jogadas').delete().eq('id', idToDelete);
-                                updateState({ jogadas: state.jogadas.filter(j => j.id != idToDelete) });
-                            }
-                        }
-                    });
-                }
+                    }
+                });
             }
 
             loginForm.addEventListener("submit", async (e) => { e.preventDefault(); authErrorEl.textContent = ''; const email = document.getElementById('login-email').value; const password = document.getElementById('login-password').value; const { error } = await db.auth.signInWithPassword({ email, password }); if (error) { authErrorEl.textContent = 'Email ou senha inválidos.'; } else { location.reload(); } });
@@ -459,7 +370,7 @@ const db = createClient(supabaseUrl, supabaseKey);
             async function checkUserSession() {
                 const { data: { session } } = await db.auth.getSession();
                 if (session) {
-                    updateState({ currentUser: session.user });
+                    currentUser = session.user;
                     authContainer.classList.add("hidden"); dashboardContainer.classList.remove("hidden");
                     await loadDashboardData();
                 } else {
@@ -471,3 +382,4 @@ const db = createClient(supabaseUrl, supabaseKey);
     </script>
 </body>
 </html>
+
