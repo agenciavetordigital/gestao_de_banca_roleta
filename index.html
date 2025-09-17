@@ -184,7 +184,7 @@
                 const { data: jogadasData } = await _supabase.from('jogadas').select('*').eq('banca_id', currentBanca.id).order('data_jogada', { ascending: false });
                 if (jogadasData) jogadas = jogadasData;
 
-                const { data: metasData } = await _supabase.from('metas_diarias').select('*').eq('banca_id', currentBanca.id).order('data', { ascending: true });
+                const { data: metasData } = await _supabase.from('metas_diarias').select('*').eq('banca_id', currentBanca.id).order('data', { ascending: false });
                 if (metasData) metasDiarias = metasData;
                 
                 renderAll();
@@ -264,7 +264,7 @@
             function renderProjection() {
                 projectionTableBody.innerHTML = '';
                 let bankrollForProjection = currentBanca.valor_inicial;
-
+                
                 metasDiarias.forEach(meta => {
                     const row = document.createElement('tr');
                     row.className = 'bg-green-900/50';
@@ -282,8 +282,9 @@
                 const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
                 bankrollForProjection += cycleProfit;
 
-                for (let i = 0; i < 15; i++) {
-                    const date = new Date(); date.setDate(date.getDate() + i + 1);
+                const remainingDays = 15 - metasDiarias.length;
+                for (let i = 0; i < remainingDays; i++) {
+                    const date = new Date(); date.setDate(new Date(metasDiarias[metasDiarias.length - 1]?.data || new Date()).getDate() + i + 1);
                     const initialProjected = bankrollForProjection;
                     const goal = currentBanca.meta_diaria_percentual > 0 ? initialProjected * (currentBanca.meta_diaria_percentual / 100) : 0;
                     const finalProjected = initialProjected + goal;
@@ -322,10 +323,17 @@
                 else { jogadas.unshift(data); addBetForm.reset(); renderAll(); }
             });
             
+            saveBankrollBtn.addEventListener('click', async () => { /* ... (código existente restaurado abaixo) ... */ });
+            goalMetBtn.addEventListener('click', async () => { /* ... (código existente restaurado abaixo) ... */ });
+            newDayBtn.addEventListener('click', async () => { /* ... (código existente restaurado abaixo) ... */ });
+            
+            function addDeleteEventListeners() { /* ... (código existente restaurado abaixo) ... */ }
+            clearDataBtn.addEventListener('click', async () => { /* ... (código existente restaurado abaixo) ... */ });
+
+            // --- LÓGICA DE AUTENTICAÇÃO E EVENTOS RESTAURADOS ---
             saveBankrollBtn.addEventListener('click', async () => {
-                const newBankroll = parseFloat(bankrollInput.value);
-                const newGoal = parseFloat(dailyGoalInput.value);
-                if (isNaN(newBankroll) || isNaN(newGoal)) { alert('Preencha valores numéricos válidos.'); return; }
+                const newBankroll = parseFloat(bankrollInput.value); const newGoal = parseFloat(dailyGoalInput.value);
+                if (isNaN(newBankroll) || isNaN(newGoal)) { alert('Por favor, preencha valores numéricos válidos.'); return; }
                 const { data, error } = await _supabase.from('bancas').update({ valor_inicial: newBankroll, meta_diaria_percentual: newGoal }).eq('id', currentBanca.id).select().single();
                 if (error) { alert('Erro ao salvar configurações: ' + error.message); } 
                 else { currentBanca = data; alert('Configurações salvas com sucesso!'); renderAll(); }
@@ -336,7 +344,7 @@
                 const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
                 const finalBankroll = currentBanca.valor_inicial + cycleProfit;
                 const { data, error } = await _supabase.from('metas_diarias').upsert({ user_id: currentUser.id, banca_id: currentBanca.id, data: todayStr, status: 'concluida', lucro_final: cycleProfit, banca_final: finalBankroll }, { onConflict: 'banca_id, data' }).select().single();
-                if (error) { alert('Erro ao fechar o dia: ' + error.message); } 
+                if (error) { alert('Erro ao fechar o ciclo: ' + error.message); } 
                 else {
                     const index = metasDiarias.findIndex(m => m.data === todayStr);
                     if (index > -1) metasDiarias[index] = data; else metasDiarias.push(data);
@@ -348,17 +356,11 @@
                 newDayBtn.disabled = true;
                 newDayBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Iniciando...';
                 try {
-                    const todayStr = getLocalDateString();
-                    const todayMeta = metasDiarias.find(m => m.data === todayStr);
-                    if (!todayMeta) throw new Error("Registro de meta para hoje não encontrado para reiniciar.");
-                    const finalBankroll = todayMeta.banca_final;
-                    
+                    const finalBankroll = currentBanca.valor_inicial + jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
                     const { error: updateError } = await _supabase.from('bancas').update({ valor_inicial: finalBankroll }).eq('id', currentBanca.id);
                     if (updateError) throw updateError;
-
                     const { error: deletePlaysError } = await _supabase.from('jogadas').delete().eq('banca_id', currentBanca.id);
                     if (deletePlaysError) throw deletePlaysError;
-
                     location.reload();
                 } catch (error) {
                     console.error("Erro ao iniciar novo ciclo:", error);
@@ -389,7 +391,6 @@
                 }
             });
 
-            // --- LÓGICA DE AUTENTICAÇÃO ---
             loginForm.addEventListener('submit', async (e) => { e.preventDefault(); authErrorEl.textContent = ''; const email = document.getElementById('login-email').value; const password = document.getElementById('login-password').value; const { error } = await _supabase.auth.signInWithPassword({ email, password }); if (error) { authErrorEl.textContent = 'Email ou senha inválidos.'; } else { location.reload(); } });
             registerForm.addEventListener('submit', async (e) => { e.preventDefault(); registerMessageEl.textContent = ''; const email = document.getElementById('register-email').value; const password = document.getElementById('register-password').value; const { error } = await _supabase.auth.signUp({ email, password }); if (error) { alert(`Erro ao cadastrar: ${error.message}`); } else { registerMessageEl.textContent = 'Cadastro realizado! Verifique seu e-mail para confirmar a conta.'; } });
             logoutBtn.addEventListener('click', async () => { await _supabase.auth.signOut(); location.reload(); });
