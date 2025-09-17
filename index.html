@@ -67,6 +67,7 @@
             const db = createClient(supabaseUrl, supabaseKey);
 
             let currentUser = null, currentBanca = null, jogadas = [], metasDiarias = [];
+
             const authContainer = document.getElementById('auth-container'), dashboardContainer = document.getElementById('dashboard-container');
             const loginForm = document.getElementById('login-form'), registerForm = document.getElementById('register-form');
             const showRegisterLink = document.getElementById('show-register-link'), showLoginLink = document.getElementById('show-login-link');
@@ -81,7 +82,7 @@
             async function loadDashboardData() {
                 if (!currentUser) return;
                 const { data: bancaData, error: bancaError } = await db.from("bancas").select("*").eq("user_id", currentUser.id).single();
-                if (bancaData) currentBanca = bancaData;
+                if(bancaData) currentBanca = bancaData;
                 else if (!bancaError || bancaError.code === 'PGRST116') {
                     const { data: newBanca } = await db.from("bancas").insert({ user_id: currentUser.id, nome_banca: "Banca Principal", valor_inicial: 100, meta_diaria_percentual: 25 }).select().single();
                     currentBanca = newBanca;
@@ -106,7 +107,7 @@
                     </header>
                     <section id="metrics-container" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8"></section>
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-                        <div class="lg:col-span-1 space-y-8">
+                        <div class="lg-col-span-1 space-y-8">
                             <div id="settings-container" class="card"></div>
                             <div id="daily-goal-container" class="card"></div>
                             <div id="bet-form-container" class="card"></div>
@@ -118,13 +119,6 @@
                 renderMetrics(); renderSettings(); renderDailyGoal(); renderBetForm(); renderBets(); renderProjection();
                 setupEvents();
             }
-
-            function renderMetrics() { /* ... */ }
-            function renderSettings() { /* ... */ }
-            function renderDailyGoal() { /* ... */ }
-            function renderBetForm() { /* ... */ }
-            function renderBets() { /* ... */ }
-            function renderProjection() { /* ... */ }
 
             function renderMetrics() {
                 const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
@@ -160,7 +154,8 @@
                 const startOfCycleBankroll = currentBanca.valor_inicial;
                 const targetProfit = currentBanca.meta_diaria_percentual > 0 ? startOfCycleBankroll * (currentBanca.meta_diaria_percentual / 100) : 0;
                 const dayIsClosed = todayMeta && todayMeta.status === 'concluida';
-                document.getElementById('daily-goal-container').innerHTML = `
+
+                let content = `
                     <h2 class="text-xl font-bold mb-4">Meta do Ciclo</h2>
                     <div class="space-y-4">
                         <div class="flex justify-between text-sm"><span class="text-gray-400">Lucro do Ciclo:</span><span class="font-semibold">${formatCurrency(cycleProfit)}</span></div>
@@ -173,6 +168,7 @@
                         </div>
                     </div>
                 `;
+                document.getElementById('daily-goal-container').innerHTML = content;
                 const goalMetContainer = document.getElementById('goal-met-container');
                 if (dayIsClosed) {
                     goalMetContainer.classList.remove('hidden');
