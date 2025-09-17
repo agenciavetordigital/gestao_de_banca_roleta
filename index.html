@@ -68,11 +68,9 @@
             }
             const { createClient } = supabase;
             // Para produção no Vercel, configure variáveis de ambiente no painel do Vercel e use um build step para injetar.
-            // Aqui, mantemos hardcoded com aviso: não commite chaves em produção!
-            const supabaseUrl = 'https://dekubpsswkfrtotwljvf.supabase.co'; // Use process.env.SUPABASE_URL em um setup com build
-            const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRla3VicHNzd2tmcnRvdHdsanZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgwNzYyOTAsImV4cCI6MjA3MzY1MjI5MH0.Winuq2LIkaGt1sGNXUhi__Q5_AczyxKAYQ_ORABoPTk'; // Use process.env.SUPABASE_KEY
-            const db = createClient(supabaseUrl, supabaseKey);
-
+            const supabaseUrl = process.env.SUPABASE_URL || 'https://dekubpsswkfrtotwljvf.supabase.co';
+const supabaseKey = process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRla3VicHNzd2tmcnRvdHdsanZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgwNzYyOTAsImV4cCI6MjA3MzY1MjI5MH0.Winuq2LIkaGt1sGNXUhi__Q5_AczyxKAYQ_ORABoPTk';
+const db = createClient(supabaseUrl, supabaseKey);
             const state = {
                 currentUser: null,
                 currentBanca: null,
