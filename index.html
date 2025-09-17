@@ -100,22 +100,24 @@
 
             function renderAll() {
                 if (!currentBanca) { dashboardContainer.innerHTML = `<p class="text-center text-red-500">Não foi possível carregar dados.</p>`; return; }
-                dashboardContainer.innerHTML = `
-                    <header class="mb-8 flex flex-wrap justify-between items-center gap-4">
-                        <div><h1 class="text-3xl md:text-4xl font-bold text-white"><i class="fas fa-compact-disc mr-3 text-red-500"></i>Gestão de Banca</h1><p class="text-gray-400 mt-2 text-sm">Logado como: ${currentUser.email}</p></div>
-                        <button id="logout-btn" class="btn btn-red"><i class="fas fa-sign-out-alt mr-2"></i>Logout</button>
-                    </header>
-                    <section id="metrics-container" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8"></section>
-                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-                        <div class="lg-col-span-1 space-y-8">
-                            <div id="settings-container" class="card"></div>
-                            <div id="daily-goal-container" class="card"></div>
-                            <div id="bet-form-container" class="card"></div>
+                if (document.getElementById('dashboard-container').innerHTML.trim() === '') {
+                    dashboardContainer.innerHTML = `
+                        <header class="mb-8 flex flex-wrap justify-between items-center gap-4">
+                            <div><h1 class="text-3xl md:text-4xl font-bold text-white"><i class="fas fa-compact-disc mr-3 text-red-500"></i>Gestão de Banca</h1><p id="user-email-display" class="text-gray-400 mt-2 text-sm">Logado como: ${currentUser.email}</p></div>
+                            <button id="logout-btn" class="btn btn-red"><i class="fas fa-sign-out-alt mr-2"></i>Logout</button>
+                        </header>
+                        <section id="metrics-container" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8"></section>
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+                            <div class="lg:col-span-1 space-y-8">
+                                <div id="settings-container" class="card"></div>
+                                <div id="daily-goal-container" class="card"></div>
+                                <div id="bet-form-container" class="card"></div>
+                            </div>
+                            <div id="bets-history-container" class="lg:col-span-2 card"></div>
                         </div>
-                        <div id="bets-history-container" class="lg:col-span-2 card"></div>
-                    </div>
-                    <div id="projection-container" class="card mb-8"></div>
-                `;
+                        <div id="projection-container" class="card mb-8"></div>
+                    `;
+                }
                 renderMetrics(); renderSettings(); renderDailyGoal(); renderBetForm(); renderBets(); renderProjection();
                 setupEvents();
             }
@@ -155,7 +157,7 @@
                 const targetProfit = currentBanca.meta_diaria_percentual > 0 ? startOfCycleBankroll * (currentBanca.meta_diaria_percentual / 100) : 0;
                 const dayIsClosed = todayMeta && todayMeta.status === 'concluida';
 
-                let content = `
+                document.getElementById('daily-goal-container').innerHTML = `
                     <h2 class="text-xl font-bold mb-4">Meta do Ciclo</h2>
                     <div class="space-y-4">
                         <div class="flex justify-between text-sm"><span class="text-gray-400">Lucro do Ciclo:</span><span class="font-semibold">${formatCurrency(cycleProfit)}</span></div>
@@ -168,7 +170,6 @@
                         </div>
                     </div>
                 `;
-                document.getElementById('daily-goal-container').innerHTML = content;
                 const goalMetContainer = document.getElementById('goal-met-container');
                 if (dayIsClosed) {
                     goalMetContainer.classList.remove('hidden');
@@ -244,7 +245,17 @@
                     bankrollForProjection = meta.banca_final;
                 });
                 const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
-                bankrollForProjection += cycleProfit;
+                const currentDayBankroll = currentBanca.valor_inicial + cycleProfit;
+                let projectionStartBankroll = metasDiarias.length > 0 ? metasDiarias[metasDiarias.length-1].banca_final : currentBanca.valor_inicial;
+                
+                if (jogadas.length > 0) {
+                     projectionStartBankroll = currentBankroll;
+                } else if(metasDiarias.length > 0) {
+                     projectionStartBankroll = metasDiarias[metasDiarias.length - 1].banca_final;
+                } else {
+                     projectionStartBankroll = currentBanca.valor_inicial;
+                }
+
                 for (let i = 0; i < 15; i++) {
                     const lastDate = metasDiarias.length > 0 ? new Date(metasDiarias[metasDiarias.length - 1].data + 'T00:00:00') : new Date(new Date().setDate(new Date().getDate() - 1));
                     const date = new Date(lastDate); date.setDate(lastDate.getDate() + i + 1);
@@ -343,13 +354,12 @@
                 });
             }
 
-            // --- LÓGICA DE AUTENTICAÇÃO INICIAL ---
             loginForm.addEventListener("submit", async (e) => { e.preventDefault(); authErrorEl.textContent = ''; const email = document.getElementById('login-email').value; const password = document.getElementById('login-password').value; const { error } = await db.auth.signInWithPassword({ email, password }); if (error) { authErrorEl.textContent = 'Email ou senha inválidos.'; } else { location.reload(); } });
             registerForm.addEventListener("submit", async (e) => { e.preventDefault(); registerMessageEl.textContent = ''; const email = document.getElementById('register-email').value; const password = document.getElementById('register-password').value; const { error } = await db.auth.signUp({ email, password }); if (error) { alert(`Erro ao cadastrar: ${error.message}`); } else { registerMessageEl.textContent = 'Cadastro realizado! Verifique seu e-mail para confirmar a conta.'; } });
             showRegisterLink.addEventListener("click", (e) => { e.preventDefault(); document.getElementById("login-view").classList.add("hidden"); document.getElementById("register-view").classList.remove("hidden"); });
             showLoginLink.addEventListener("click", (e) => { e.preventDefault(); document.getElementById("register-view").classList.add("hidden"); document.getElementById("login-view").classList.remove("hidden"); });
 
-            const checkUserSession = async () => {
+            async function checkUserSession() {
                 const { data: { session } } = await db.auth.getSession();
                 if (session) {
                     currentUser = session.user;
@@ -359,7 +369,6 @@
                     dashboardContainer.classList.add("hidden"); authContainer.classList.remove("hidden");
                 }
             };
-            
             checkUserSession();
         });
     </script>
