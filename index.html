@@ -83,7 +83,7 @@
                 return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
             };
             
-            // --- LÓGICA DE DADOS ---
+            // --- FUNÇÕES DE DADOS ---
             async function loadDashboardData() {
                 if (!currentUser) return;
                 const { data: bancaData, error: bancaError } = await db.from("bancas").select("*").eq("user_id", currentUser.id).single();
@@ -103,7 +103,7 @@
                 renderAll();
             }
 
-            // --- LÓGICA DE RENDERIZAÇÃO ---
+            // --- FUNÇÕES DE RENDERIZAÇÃO ---
             function renderAll() {
                 if (!currentBanca) { dashboardContainer.innerHTML = `<p class="text-center text-red-500">Não foi possível carregar dados.</p>`; return; }
                 
@@ -325,7 +325,7 @@
                     const todayStr = getLocalDateString();
                     const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
                     const finalBankroll = currentBanca.valor_inicial + cycleProfit;
-                    const { data: newMeta, error } = await db.from('metas_diarias').upsert({ user_id: currentUser.id, banca_id: currentBanca.id, data: todayStr, status: 'concluida', lucro_final: cycleProfit, banca_final: finalBankroll }, { onConflict: 'banca_id, data' }).select().single();
+                    const { data: newMeta, error } = await db.from('metas_diarias').upsert({ user_id: currentUser.id, banca_id: currentBanca.id, data: todayStr, status: 'concluida', lucro_final: cycleProfit, banca_final: finalBankroll, banca_inicial: currentBanca.valor_inicial }, { onConflict: 'banca_id, data' }).select().single();
                     if (!error) {
                         const index = metasDiarias.findIndex(m => m.data === todayStr);
                         if (index > -1) metasDiarias[index] = newMeta; else metasDiarias.push(newMeta);
@@ -337,11 +337,15 @@
                     btn.disabled = true;
                     btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Iniciando...';
                     try {
-                        const finalBankroll = currentBanca.valor_inicial + jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
+                        const todayStr = getLocalDateString();
+                        const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
+                        const finalBankroll = currentBanca.valor_inicial + cycleProfit;
                         await db.from('bancas').update({ valor_inicial: finalBankroll }).eq('id', currentBanca.id);
                         await db.from('jogadas').delete().eq('banca_id', currentBanca.id);
+                        await db.from('metas_diarias').delete().eq('banca_id', currentBanca.id).eq('data', todayStr);
                         // Recarrega os dados do zero, sem recarregar a página
                         jogadas = [];
+                        metasDiarias = metasDiarias.filter(m => m.data !== todayStr);
                         await loadDashboardData();
                     } catch (error) {
                         alert('Ocorreu um erro: ' + error.message);
@@ -382,4 +386,3 @@
     </script>
 </body>
 </html>
-
