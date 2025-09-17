@@ -67,15 +67,10 @@
             const db = createClient(supabaseUrl, supabaseKey);
 
             let currentUser = null, currentBanca = null, jogadas = [], metasDiarias = [];
-
-            const authContainer = document.getElementById('auth-container');
-            const dashboardContainer = document.getElementById('dashboard-container');
-            const loginForm = document.getElementById('login-form');
-            const registerForm = document.getElementById('register-form');
-            const showRegisterLink = document.getElementById('show-register-link');
-            const showLoginLink = document.getElementById('show-login-link');
-            const authErrorEl = document.getElementById('auth-error');
-            const registerMessageEl = document.getElementById('register-message');
+            const authContainer = document.getElementById('auth-container'), dashboardContainer = document.getElementById('dashboard-container');
+            const loginForm = document.getElementById('login-form'), registerForm = document.getElementById('register-form');
+            const showRegisterLink = document.getElementById('show-register-link'), showLoginLink = document.getElementById('show-login-link');
+            const authErrorEl = document.getElementById('auth-error'), registerMessageEl = document.getElementById('register-message');
 
             const formatCurrency = (v) => (v === null || v === undefined ? 0 : v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
             const getLocalDateString = (d) => {
@@ -86,12 +81,11 @@
             async function loadDashboardData() {
                 if (!currentUser) return;
                 const { data: bancaData, error: bancaError } = await db.from("bancas").select("*").eq("user_id", currentUser.id).single();
-                if(bancaData) currentBanca = bancaData;
+                if (bancaData) currentBanca = bancaData;
                 else if (!bancaError || bancaError.code === 'PGRST116') {
                     const { data: newBanca } = await db.from("bancas").insert({ user_id: currentUser.id, nome_banca: "Banca Principal", valor_inicial: 100, meta_diaria_percentual: 25 }).select().single();
                     currentBanca = newBanca;
                 } else console.error("Erro ao carregar banca:", bancaError);
-                
                 if (!currentBanca) return;
 
                 const [jogadasRes, metasRes] = await Promise.all([
@@ -100,15 +94,11 @@
                 ]);
                 jogadas = jogadasRes.data || [];
                 metasDiarias = metasRes.data || [];
-                
                 renderAll();
             }
 
             function renderAll() {
-                if (!currentBanca) {
-                    dashboardContainer.innerHTML = `<p class="text-center text-red-500">Não foi possível carregar os dados da sua banca.</p>`;
-                    return;
-                }
+                if (!currentBanca) { dashboardContainer.innerHTML = `<p class="text-center text-red-500">Não foi possível carregar dados.</p>`; return; }
                 dashboardContainer.innerHTML = `
                     <header class="mb-8 flex flex-wrap justify-between items-center gap-4">
                         <div><h1 class="text-3xl md:text-4xl font-bold text-white"><i class="fas fa-compact-disc mr-3 text-red-500"></i>Gestão de Banca</h1><p class="text-gray-400 mt-2 text-sm">Logado como: ${currentUser.email}</p></div>
@@ -129,6 +119,13 @@
                 setupEvents();
             }
 
+            function renderMetrics() { /* ... */ }
+            function renderSettings() { /* ... */ }
+            function renderDailyGoal() { /* ... */ }
+            function renderBetForm() { /* ... */ }
+            function renderBets() { /* ... */ }
+            function renderProjection() { /* ... */ }
+
             function renderMetrics() {
                 const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
                 const totalStaked = jogadas.reduce((acc, j) => acc + j.valor_apostado, 0);
@@ -138,7 +135,6 @@
                 metasDiarias.forEach(meta => { totalProfitAllTime += meta.lucro_final; });
                 const roi = totalStaked > 0 ? (cycleProfit / totalStaked) * 100 : 0;
                 const winRate = jogadas.length > 0 ? (wonPlays / jogadas.length) * 100 : 0;
-
                 document.getElementById('metrics-container').innerHTML = `
                     <div class="card"><h3 class="text-sm font-medium text-gray-400">BANCA INICIAL</h3><p class="text-2xl font-semibold mt-2">${formatCurrency(metasDiarias[0]?.banca_inicial || currentBanca.valor_inicial)}</p></div>
                     <div class="card"><h3 class="text-sm font-medium text-gray-400">BANCA ATUAL</h3><p class="text-2xl font-semibold mt-2">${formatCurrency(currentBankroll)}</p></div>
@@ -164,8 +160,7 @@
                 const startOfCycleBankroll = currentBanca.valor_inicial;
                 const targetProfit = currentBanca.meta_diaria_percentual > 0 ? startOfCycleBankroll * (currentBanca.meta_diaria_percentual / 100) : 0;
                 const dayIsClosed = todayMeta && todayMeta.status === 'concluida';
-
-                let content = `
+                document.getElementById('daily-goal-container').innerHTML = `
                     <h2 class="text-xl font-bold mb-4">Meta do Ciclo</h2>
                     <div class="space-y-4">
                         <div class="flex justify-between text-sm"><span class="text-gray-400">Lucro do Ciclo:</span><span class="font-semibold">${formatCurrency(cycleProfit)}</span></div>
@@ -178,8 +173,6 @@
                         </div>
                     </div>
                 `;
-                document.getElementById('daily-goal-container').innerHTML = content;
-
                 const goalMetContainer = document.getElementById('goal-met-container');
                 if (dayIsClosed) {
                     goalMetContainer.classList.remove('hidden');
@@ -242,7 +235,6 @@
             function renderProjection() {
                 let rows = "";
                 let bankrollForProjection = metasDiarias[0]?.banca_inicial || currentBanca.valor_inicial;
-                
                 metasDiarias.forEach(meta => {
                     rows += `
                         <tr class="bg-green-900/50">
@@ -255,10 +247,8 @@
                     `;
                     bankrollForProjection = meta.banca_final;
                 });
-                
                 const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
                 bankrollForProjection += cycleProfit;
-
                 for (let i = 0; i < 15; i++) {
                     const lastDate = metasDiarias.length > 0 ? new Date(metasDiarias[metasDiarias.length - 1].data + 'T00:00:00') : new Date(new Date().setDate(new Date().getDate() - 1));
                     const date = new Date(lastDate); date.setDate(lastDate.getDate() + i + 1);
@@ -295,7 +285,7 @@
                     const newGoal = parseFloat(document.getElementById('daily-goal-input').value);
                     if (isNaN(newBankroll) || isNaN(newGoal)) { return alert('Valores inválidos.'); }
                     const { data, error } = await db.from('bancas').update({ valor_inicial: newBankroll, meta_diaria_percentual: newGoal }).eq('id', currentBanca.id).select().single();
-                    if (error) { alert('Erro ao salvar: ' + error.message); } else { currentBanca = data; alert('Configurações salvas!'); renderAll(); setupEvents(); }
+                    if (error) { alert('Erro ao salvar: ' + error.message); } else { currentBanca = data; alert('Configurações salvas!'); renderAll(); }
                 });
                 document.getElementById("add-bet-form")?.addEventListener("submit", async (e) => {
                     e.preventDefault();
@@ -311,12 +301,12 @@
                     else if (outcome === 'loss') { result = 0; status = 'loss'; }
                     if (totalStake <= 0) return alert("Valor apostado inválido.");
                     const { data: newBet, error } = await db.from('jogadas').insert({ banca_id: currentBanca.id, valor_apostado: totalStake, retorno: result, status: status, estrategia: 'Jogada Manual' }).select().single();
-                    if (error) { alert("Erro ao registrar jogada."); } else { jogadas.unshift(newBet); document.getElementById('add-bet-form').reset(); renderAll(); setupEvents(); }
+                    if (error) { alert("Erro ao registrar jogada."); } else { jogadas.unshift(newBet); document.getElementById('add-bet-form').reset(); renderAll(); }
                 });
                 document.getElementById("clear-data-btn")?.addEventListener("click", async () => {
                     if (!confirm("Tem certeza?")) return;
                     await db.from("jogadas").delete().eq("banca_id", currentBanca.id);
-                    jogadas = []; renderAll(); setupEvents();
+                    jogadas = []; renderAll();
                 });
                 document.getElementById("goal-met-btn")?.addEventListener("click", async () => {
                     const todayStr = getLocalDateString();
@@ -327,7 +317,6 @@
                         const index = metasDiarias.findIndex(m => m.data === todayStr);
                         if (index > -1) metasDiarias[index] = newMeta; else metasDiarias.push(newMeta);
                         renderAll();
-                        setupEvents();
                     }
                 });
                 document.getElementById("new-day-btn")?.addEventListener("click", async () => {
@@ -353,7 +342,6 @@
                             await db.from('jogadas').delete().eq('id', idToDelete);
                             jogadas = jogadas.filter(j => j.id != idToDelete);
                             renderAll();
-                            setupEvents();
                         }
                     }
                 });
@@ -381,3 +369,4 @@
     </script>
 </body>
 </html>
+
