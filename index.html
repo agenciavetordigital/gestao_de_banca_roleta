@@ -108,7 +108,6 @@
             function renderAll() {
                 if (!currentBanca) { dashboardContainer.innerHTML = `<p class="text-center text-red-500">Não foi possível carregar dados.</p>`; return; }
                 
-                // Renderiza a estrutura principal do dashboard
                 dashboardContainer.innerHTML = `
                     <header class="mb-8 flex flex-wrap justify-between items-center gap-4">
                         <div><h1 class="text-3xl md:text-4xl font-bold text-white"><i class="fas fa-compact-disc mr-3 text-red-500"></i>Gestão de Banca</h1><p class="text-gray-400 mt-2 text-sm">Logado como: ${currentUser.email}</p></div>
@@ -126,7 +125,6 @@
                     <div id="projection-container" class="card mb-8"></div>
                 `;
                 
-                // Renderiza os componentes individuais
                 renderMetrics(); 
                 renderSettings(); 
                 renderDailyGoal(); 
@@ -134,7 +132,6 @@
                 renderBets(); 
                 renderProjection();
                 
-                // Configura os eventos para os elementos recém-criados
                 setupEvents();
             }
 
@@ -156,6 +153,7 @@
                     <div class="card"><h3 class="text-sm font-medium text-gray-400">WIN RATE DO CICLO</h3><p class="text-2xl font-semibold mt-2">${winRate.toFixed(2)}%</p></div>
                 `;
             }
+
             function renderSettings() {
                 document.getElementById('settings-container').innerHTML = `
                     <h2 class="text-xl font-bold mb-4">Configurações</h2>
@@ -166,6 +164,7 @@
                     </div>
                 `;
             }
+
             function renderDailyGoal() {
                 const todayStr = getLocalDateString();
                 const todayMeta = metasDiarias.find(m => m.data === todayStr);
@@ -179,25 +178,22 @@
                     <div class="space-y-4">
                         <div class="flex justify-between text-sm"><span class="text-gray-400">Lucro do Ciclo:</span><span class="font-semibold">${formatCurrency(cycleProfit)}</span></div>
                         <div class="flex justify-between text-sm"><span class="text-gray-400">Meta do Ciclo:</span><span class="font-semibold">${formatCurrency(targetProfit)}</span></div>
-                        <div id="goal-met-container" class="hidden mt-4 space-y-2 text-center">
-                            <h3 id="goal-title" class="text-lg font-bold status-green">Parabéns, meta batida!</h3>
-                            <button id="goal-met-btn" class="btn btn-green w-full"><i class="fas fa-flag-checkered mr-2"></i>Fechar Ciclo</button>
-                            <button id="new-day-btn" class="btn btn-primary w-full hidden"><i class="fas fa-redo-alt mr-2"></i>Começar Novo Ciclo</button>
-                            <p id="goal-met-message" class="text-sm text-gray-300 font-medium"></p>
+                        <div id="goal-met-container" class="mt-4 space-y-2 text-center">
+                            <h3 id="goal-title" class="text-lg font-bold ${dayIsClosed ? 'status-green' : ''}">${dayIsClosed ? 'Ciclo Concluído!' : 'Parabéns, meta batida!'}</h3>
+                            <button id="goal-met-btn" class="btn btn-green w-full ${dayIsClosed ? 'hidden' : ''}"><i class="fas fa-flag-checkered mr-2"></i>Fechar Ciclo</button>
+                            <button id="new-day-btn" class="btn btn-primary w-full ${!dayIsClosed ? 'hidden' : ''}"><i class="fas fa-redo-alt mr-2"></i>Começar Novo Ciclo</button>
+                            <p id="goal-met-message" class="text-sm text-gray-300 font-medium">${dayIsClosed ? `O ciclo do dia ${new Date(todayStr + 'T00:00:00').toLocaleDateString('pt-BR')} foi fechado.` : ''}</p>
                         </div>
                     </div>
                 `;
-                const goalMetContainer = document.getElementById('goal-met-container');
-                if (dayIsClosed) {
-                    goalMetContainer.classList.remove('hidden');
-                    document.getElementById('goal-title').textContent = "Ciclo Concluído!";
-                    document.getElementById('goal-met-message').textContent = `O ciclo do dia ${new Date(todayStr + 'T00:00:00').toLocaleDateString('pt-BR')} foi fechado.`;
-                    document.getElementById('goal-met-btn').classList.add('hidden');
-                    document.getElementById('new-day-btn').classList.remove('hidden');
-                } else if (cycleProfit >= targetProfit && targetProfit > 0) {
-                    goalMetContainer.classList.remove('hidden');
+
+                if (!dayIsClosed && cycleProfit >= targetProfit && targetProfit > 0) {
+                    document.getElementById('goal-met-container').classList.remove('hidden');
+                } else if (dayIsClosed) {
+                    document.getElementById('goal-met-container').classList.remove('hidden');
                 }
             }
+
             function renderBetForm() {
                 document.getElementById('bet-form-container').innerHTML = `
                     <h2 class="text-xl font-bold mb-4">Registrar Jogada</h2>
@@ -218,6 +214,7 @@
                     document.getElementById('add-bet-form').querySelectorAll('input, button').forEach(el => el.disabled = true);
                 }
             }
+
             function renderBets() {
                 let rows = "";
                 jogadas.forEach(bet => {
@@ -246,9 +243,10 @@
                     </table></div>
                 `;
             }
+
             function renderProjection() {
                 let rows = "";
-                let bankrollForProjection = metasDiarias[0]?.banca_inicial || currentBanca.valor_inicial;
+                let bankrollForProjection = metasDiarias.length > 0 ? metasDiarias[0].banca_inicial : currentBanca.valor_inicial;
                 metasDiarias.forEach(meta => {
                     const isAchieved = meta.status === 'concluida';
                     rows += `
@@ -265,9 +263,11 @@
                 const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
                 const currentProjectedBankroll = bankrollForProjection + cycleProfit;
                 bankrollForProjection = currentProjectedBankroll;
-                for (let i = 0; i < 15; i++) {
-                    const lastDate = metasDiarias.length > 0 ? new Date(metasDiarias[metasDiarias.length - 1].data + 'T00:00:00') : new Date(new Date().setDate(new Date().getDate() - 1));
-                    const date = new Date(lastDate); date.setDate(lastDate.getDate() + i + 1);
+                const todayStr = getLocalDateString();
+                const lastDate = metasDiarias.length > 0 ? new Date(metasDiarias[metasDiarias.length - 1].data + 'T00:00:00') : new Date();
+                for (let i = (metasDiarias.length > 0 ? 1 : 0); i < 15; i++) {
+                    const date = new Date(lastDate); date.setDate(lastDate.getDate() + i);
+                    if (date.toISOString().split('T')[0] === todayStr) continue; // Pula o dia atual para evitar duplicação
                     const initialProjected = bankrollForProjection;
                     const goal = currentBanca.meta_diaria_percentual > 0 ? initialProjected * (currentBanca.meta_diaria_percentual / 100) : 0;
                     const finalProjected = initialProjected + goal;
@@ -328,13 +328,21 @@
                     const todayStr = getLocalDateString();
                     const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
                     const finalBankroll = currentBanca.valor_inicial + cycleProfit;
-                    const { data: newMeta, error } = await db.from('metas_diarias').upsert({ user_id: currentUser.id, banca_id: currentBanca.id, data: todayStr, status: 'concluida', lucro_final: cycleProfit, banca_final: finalBankroll, banca_inicial: currentBanca.valor_inicial }, { onConflict: 'banca_id, data' }).select().single();
-                    if (!error) {
+                    const { data: newMeta, error } = await db.from('metas_diarias').upsert({ 
+                        user_id: currentUser.id, 
+                        banca_id: currentBanca.id, 
+                        data: todayStr, 
+                        status: 'concluida', 
+                        lucro_final: cycleProfit, 
+                        banca_final: finalBankroll,
+                        banca_inicial: currentBanca.valor_inicial 
+                    }, { onConflict: 'banca_id, data' }).select().single();
+                    if (error) {
+                        alert('Erro ao fechar ciclo: ' + error.message);
+                    } else {
                         const index = metasDiarias.findIndex(m => m.data === todayStr);
                         if (index > -1) metasDiarias[index] = newMeta; else metasDiarias.push(newMeta);
                         renderAll();
-                    } else {
-                        alert('Erro ao fechar ciclo: ' + error.message);
                     }
                 });
                 document.getElementById("new-day-btn")?.addEventListener("click", async () => {
@@ -347,10 +355,10 @@
                         const finalBankroll = currentBanca.valor_inicial + cycleProfit;
                         await db.from('bancas').update({ valor_inicial: finalBankroll }).eq('id', currentBanca.id);
                         await db.from('jogadas').delete().eq('banca_id', currentBanca.id);
-                        // Não deleta a meta do dia, apenas reseta jogadas e banca
                         jogadas = [];
-                        currentBanca.valor_inicial = finalBankroll;
-                        renderAll();
+                        await loadDashboardData(); // Recarrega dados para garantir sincronia
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-redo-alt mr-2"></i>Começar Novo Ciclo';
                     } catch (error) {
                         alert('Ocorreu um erro: ' + error.message);
                         btn.disabled = false;
