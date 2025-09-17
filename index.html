@@ -163,12 +163,10 @@
             const bankrollInput = document.getElementById('bankroll-input'), dailyGoalInput = document.getElementById('daily-goal-input'), saveBankrollBtn = document.getElementById('save-bankroll-btn');
             const todayProfitEl = document.getElementById('today-profit'), todayTargetEl = document.getElementById('today-target'), progressBarInner = document.getElementById('progress-bar-inner');
             const goalMetContainer = document.getElementById('goal-met-container'), goalMetBtn = document.getElementById('goal-met-btn'), goalMetMessage = document.getElementById('goal-met-message');
+            const newDayBtn = document.getElementById('new-day-btn'), goalTitle = document.getElementById('goal-title');
             const betsTableBody = document.getElementById('bets-table-body'), noBetsMessage = document.getElementById('no-bets-message'), clearDataBtn = document.getElementById('clear-data-btn');
             const projectionTableBody = document.getElementById('projection-table-body');
             const addBetForm = document.getElementById('add-bet-form');
-            // ### SELETORES CORRIGIDOS E ADICIONADOS ###
-            const newDayBtn = document.getElementById('new-day-btn');
-            const goalTitle = document.getElementById('goal-title');
 
             // --- FUNÇÃO AUXILIAR DE DATA ---
             function getLocalDateString(date) {
@@ -176,7 +174,7 @@
                 return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
             }
             
-            // --- FUNÇÕES DE LÓGICA DE DADOS ---
+            // --- LÓGICA DE DADOS ---
             async function loadDashboardData() {
                 if (!currentUser) return;
                 const { data: bancaData, error: bancaError } = await _supabase.from('bancas').select('*').eq('user_id', currentUser.id).single();
@@ -195,7 +193,7 @@
                 renderAll();
             }
 
-            // --- FUNÇÕES DE RENDERIZAÇÃO ---
+            // --- LÓGICA DE RENDERIZAÇÃO ---
             function renderAll() {
                 if (!currentBanca) return;
                 renderMetrics();
@@ -317,19 +315,16 @@
 
             // --- FUNÇÕES AUXILIARES ---
             function getBankrollAtStartOfDay(dateStr) {
-                const playsBeforeToday = jogadas.filter(j => getLocalDateString(j.data_jogada) < dateStr);
-                const profitBeforeToday = playsBeforeToday.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
-                return currentBanca.valor_inicial + profitBeforeToday;
+                const playsBefore = jogadas.filter(j => getLocalDateString(j.data_jogada) < dateStr);
+                const profitBefore = playsBefore.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
+                return currentBanca.valor_inicial + profitBefore;
             }
             function getTodaysProfit() {
                 const todayStr = getLocalDateString();
                 const todaysPlays = jogadas.filter(j => getLocalDateString(j.data_jogada) === todayStr);
                 return todaysPlays.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
             }
-            function getStatusBadge(status) {
-                if (status && status.startsWith('win')) return '<span class="status-green font-semibold">Ganha</span>';
-                if (status === 'loss') return '<span class="status-red font-semibold">Perdida</span>'; return '';
-            }
+            function getStatusBadge(status) { if (status && status.startsWith('win')) return '<span class="status-green font-semibold">Ganha</span>'; if (status === 'loss') return '<span class="status-red font-semibold">Perdida</span>'; return ''; }
             function formatCurrency(value) { return (value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
             
             // --- EVENTOS ---
@@ -372,32 +367,25 @@
                 else {
                     const index = metasDiarias.findIndex(m => m.data === todayStr);
                     if (index > -1) metasDiarias[index] = data; else metasDiarias.push(data);
-                    alert('Meta do dia concluída e salva com sucesso!');
                     renderAll();
                 }
             });
             
-            // ### EVENTO DO BOTÃO 'COMEÇAR NOVO DIA' ATUALIZADO ###
             newDayBtn.addEventListener('click', async () => {
-                const todayStr = getLocalDateString();
-                const todayMeta = metasDiarias.find(m => m.data === todayStr);
-                if (!todayMeta || todayMeta.status !== 'concluida') {
-                    alert('Erro: O dia precisa ser fechado primeiro.');
-                    return;
+                newDayBtn.disabled = true;
+                newDayBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Iniciando...';
+                try {
+                    const finalBankroll = getBankrollAtStartOfDay(getLocalDateString()) + getTodaysProfit();
+                    const { error: updateError } = await _supabase.from('bancas').update({ valor_inicial: finalBankroll }).eq('id', currentBanca.id);
+                    if (updateError) throw updateError;
+                    const { error: deleteError } = await _supabase.from('jogadas').delete().eq('banca_id', currentBanca.id);
+                    if (deleteError) throw deleteError;
+                    location.reload();
+                } catch (error) {
+                    alert('Ocorreu um erro ao iniciar o novo dia: ' + error.message);
+                    newDayBtn.disabled = false;
+                    newDayBtn.innerHTML = '<i class="fas fa-redo-alt mr-2"></i>Começar Novo Dia de Metas';
                 }
-                
-                const finalBankroll = todayMeta.banca_final;
-                
-                // 1. Atualiza a banca com o valor final do dia fechado
-                const { error: updateError } = await _supabase.from('bancas').update({ valor_inicial: finalBankroll }).eq('id', currentBanca.id);
-                if(updateError) { alert('Erro ao atualizar a banca: ' + updateError.message); return; }
-
-                // 2. Apaga as jogadas do ciclo anterior (agora da banca toda)
-                const { error: deleteError } = await _supabase.from('jogadas').delete().eq('banca_id', currentBanca.id);
-                if(deleteError) { alert('Erro ao limpar jogadas do ciclo: ' + deleteError.message); return; }
-
-                // 3. Recarrega a página para um estado limpo
-                location.reload();
             });
             
             function addDeleteEventListeners() {
