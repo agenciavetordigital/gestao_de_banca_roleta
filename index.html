@@ -387,6 +387,13 @@
           await handleCloseCycle();
         });
 
+        // restart cycle
+        document.getElementById('daily-card').addEventListener('click', async (ev) => {
+          const btn = ev.target.closest('#restart-cycle');
+          if (!btn) return;
+          await restartCycle();
+        });
+
         // save settings
         document.getElementById('save-settings').addEventListener('click', async () => {
           const newBank = parseFloat(document.getElementById('bankroll-input').value) || 0;
@@ -566,6 +573,52 @@
         // 5. Recarregue os dados
         await loadAllData();
         alert('Ciclo concluído. Nova meta liberada automaticamente amanhã.');
+      }
+
+      // restart cycle safely
+      async function restartCycle() {
+        if (!currentBanca || !currentUser) return;
+
+        const today = todayYMD();
+
+        // 1. Verifique se já existe uma meta para hoje (no DB)
+        const { data: existingMeta, error: existErr } = await db.from('metas_diarias')
+          .select('*')
+          .eq('banca_id', currentBanca.id)
+          .eq('data', today)
+          .maybeSingle();
+
+        if (existErr) {
+          debug('Erro ao verificar meta hoje: ' + existErr.message, 'error');
+          return alert('Erro ao verificar meta.');
+        }
+
+        if (existingMeta && String(existingMeta.status).toLowerCase().includes('conclu')) {
+          // Se já existe meta concluída, pergunte se o usuário quer reiniciar
+          if (!confirm('Você já tem uma meta concluída hoje. Deseja reiniciar o ciclo e começar uma nova meta?')) {
+            return;
+          }
+
+          // Apague a meta do dia
+          const { error: delMetaErr } = await db.from('metas_diarias').delete().eq('banca_id', currentBanca.id).eq('data', today);
+          if (delMetaErr) {
+            debug('Erro ao apagar meta: ' + delMetaErr.message, 'error');
+            return alert('Erro ao reiniciar ciclo.');
+          }
+
+          // Apague as jogadas do dia
+          const { error: delJogadasErr } = await db.from('jogadas').delete().eq('banca_id', currentBanca.id);
+          if (delJogadasErr) {
+            debug('Erro ao apagar jogadas: ' + delJogadasErr.message, 'error');
+            return alert('Erro ao reiniciar ciclo.');
+          }
+
+          // Recarregue os dados
+          await loadAllData();
+          alert('Ciclo reiniciado. Nova meta iniciada!');
+        } else {
+          alert('Não há meta concluída hoje. Não é possível reiniciar.');
+        }
       }
 
       // init
