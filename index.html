@@ -338,9 +338,8 @@
                     const finalBankroll = currentBanca.valor_inicial + cycleProfit;
                     const todayStr = getLocalDateString();
 
-                    // Salva o resultado do ciclo no histórico. 
-                    // Usamos 'insert' para permitir múltiplos ciclos concluídos no mesmo dia.
-                    await db.from('metas_diarias').insert({ 
+                    // Salva o resultado do ciclo no histórico e retorna o registro inserido
+                    const { data: newMeta, error: metaError } = await db.from('metas_diarias').insert({ 
                         user_id: currentUser.id, 
                         banca_id: currentBanca.id, 
                         data: todayStr, 
@@ -348,16 +347,21 @@
                         lucro_final: cycleProfit, 
                         banca_final: finalBankroll,
                         banca_inicial: currentBanca.valor_inicial 
-                    });
+                    }).select().single();
 
-                    // Atualiza a banca principal com o novo valor inicial para o próximo ciclo
+                    if (metaError) throw metaError;
+
+                    // ATUALIZAÇÃO: Modifica o estado local diretamente para evitar race conditions de leitura/escrita.
+                    metasDiarias.push(newMeta);
+                    currentBanca.valor_inicial = finalBankroll;
+                    jogadas = []; // Limpa as jogadas do ciclo anterior localmente
+
+                    // Executa as atualizações no banco de dados que não precisam de retorno
                     await db.from('bancas').update({ valor_inicial: finalBankroll }).eq('id', currentBanca.id);
-                    
-                    // Apaga as jogadas do ciclo que acabou de ser fechado
                     await db.from('jogadas').delete().eq('banca_id', currentBanca.id);
                     
-                    // Recarrega todos os dados do dashboard para refletir o novo estado (novo ciclo)
-                    await loadDashboardData();
+                    // Renderiza a UI com os dados locais atualizados, sem precisar de uma nova busca completa.
+                    renderAll();
 
                 } catch (error) {
                     alert('Ocorreu um erro ao fechar o ciclo: ' + error.message);
@@ -399,6 +403,7 @@
     </script>
 </body>
 </html>
+
 
 
 
