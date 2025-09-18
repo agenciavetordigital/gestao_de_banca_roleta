@@ -60,13 +60,13 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            // --- INICIALIZAÇÃO E CONEXÃO ---
-            const { createClient } = supabase;
-            const supabaseUrl = 'https://dekubpsswkfrtotwljvf.supabase.co';
-            const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRla3VicHNzd2tmcnRvdHdsanZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgwNzYyOTAsImV4cCI6MjA3MzY1MjI5MH0.Winuq2LIkaGt1sGNXUhi__Q5_AczyxKAYQ_ORABoPTk';
-            const db = createClient(supabaseUrl, supabaseKey);
-
+      <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- INICIALIZAÇÃO E CONEXÃO ---
+        const { createClient } = supabase;
+        const supabaseUrl = window.env.SUPABASE_URL || 'https://dekubpsswkfrtotwljvf.supabase.co';
+        const supabaseKey = window.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRla3VicHNzd2tmcnRvdHdsanZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgwNzYyOTAsImV4cCI6MjA3MzY1MjI5MH0.Winuq2LIkaGt1sGNXUhi__Q5_AczyxKAYQ_ORABoPTk';
+        const db = createClient(supabaseUrl, supabaseKey);
             // --- ESTADO DA APLICAÇÃO ---
             let currentUser = null, currentBanca = null, jogadas = [], metasDiarias = [];
 
