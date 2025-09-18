@@ -29,7 +29,7 @@
 <body class="p-4 md:p-8">
 
     <!-- TELA DE AUTENTICAÇÃO -->
-    <div id="auth-container" class="max-w-md mx-auto">
+    <div id="auth-container" class="max-w-md mx-auto hidden">
         <div class="card">
             <div id="login-view">
                 <h2 class="text-2xl font-bold text-center mb-6">Login</h2>
@@ -63,10 +63,8 @@
     document.addEventListener('DOMContentLoaded', () => {
         // --- INICIALIZAÇÃO E CONEXÃO ---
         const { createClient } = supabase;
-        
         const supabaseUrl = 'https://dekubpsswkfrtotwljvf.supabase.co';
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRla3VicHNzd2tmcnRvdHdsanZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgwNzYyOTAsImV4cCI6MjA3MzY1MjI5MH0.Winuq2LIkaGt1sGNXUhi__Q5_AczyxKAYQ_ORABoPTk';
-
         const db = createClient(supabaseUrl, supabaseKey);
         
         // --- ESTADO DA APLICAÇÃO ---
@@ -94,7 +92,6 @@
 
             const [jogadasRes, metasRes] = await Promise.all([
                 db.from("jogadas").select("*").eq("banca_id", currentBanca.id).order("data_jogada", { ascending: false }),
-                // CORREÇÃO: Ordena os ciclos pela data de criação para garantir a ordem cronológica correta.
                 db.from("metas_diarias").select("*").eq("banca_id", currentBanca.id).order("created_at", { ascending: true })
             ]);
             jogadas = jogadasRes.data || [];
@@ -109,7 +106,7 @@
             // Renderiza a estrutura principal do dashboard
             dashboardContainer.innerHTML = `
                 <header class="mb-8 flex flex-wrap justify-between items-center gap-4">
-                    <div><h1 class="text-3xl md:text-4xl font-bold text-white"><i class="fas fa-compact-disc mr-3 text-red-500"></i>Gestão de Banca</h1><p class="text-gray-400 mt-2 text-sm">Logado como: ${currentUser.email}</p></div>
+                    <div><h1 class="text-3xl md:text-4xl font-bold text-white"><i class="fas fa-dot-circle mr-3 text-red-500"></i>Gestão de Banca</h1><p class="text-gray-400 mt-2 text-sm">Logado como: ${currentUser.email}</p></div>
                     <button id="logout-btn" class="btn btn-red"><i class="fas fa-sign-out-alt mr-2"></i>Logout</button>
                 </header>
                 <section id="metrics-container" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8"></section>
@@ -127,7 +124,7 @@
             // Renderiza os componentes individuais
             renderMetrics(); 
             renderSettings(); 
-            renderCycleGoal(); // Alterado de renderDailyGoal para renderCycleGoal
+            renderDailyGoal(); 
             renderBetForm(); 
             renderBets(); 
             renderProjection();
@@ -142,14 +139,15 @@
             const wonPlays = jogadas.filter(j => j.retorno > j.valor_apostado).length;
             const currentBankroll = currentBanca.valor_inicial + cycleProfit;
             let totalProfitAllTime = 0;
-            // O lucro total agora é a soma de todos os lucros de ciclos passados, mais o lucro do ciclo atual
             metasDiarias.forEach(meta => { totalProfitAllTime += meta.lucro_final; });
-            totalProfitAllTime += cycleProfit;
             const roi = totalStaked > 0 ? (cycleProfit / totalStaked) * 100 : 0;
             const winRate = jogadas.length > 0 ? (wonPlays / jogadas.length) * 100 : 0;
 
+            // CORREÇÃO: A banca inicial total deve ser a banca inicial do primeiro ciclo registrado.
+            const totalInitialBankroll = metasDiarias.length > 0 ? metasDiarias[0].banca_inicial : currentBanca.valor_inicial;
+
             document.getElementById('metrics-container').innerHTML = `
-                <div class="card"><h3 class="text-sm font-medium text-gray-400">BANCA INICIAL (TOTAL)</h3><p class="text-2xl font-semibold mt-2">${formatCurrency(metasDiarias[0]?.banca_inicial || currentBanca.valor_inicial)}</p></div>
+                <div class="card"><h3 class="text-sm font-medium text-gray-400">BANCA INICIAL (TOTAL)</h3><p class="text-2xl font-semibold mt-2">${formatCurrency(totalInitialBankroll)}</p></div>
                 <div class="card"><h3 class="text-sm font-medium text-gray-400">BANCA ATUAL</h3><p class="text-2xl font-semibold mt-2">${formatCurrency(currentBankroll)}</p></div>
                 <div class="card"><h3 class="text-sm font-medium text-gray-400">LUCRO TOTAL</h3><p class="text-2xl font-semibold mt-2">${formatCurrency(totalProfitAllTime)}</p></div>
                 <div class="card"><h3 class="text-sm font-medium text-gray-400">ROI DO CICLO</h3><p class="text-2xl font-semibold mt-2">${roi.toFixed(2)}%</p></div>
@@ -166,13 +164,10 @@
                 </div>
             `;
         }
-        
-        // Lógica de meta foi refatorada para focar em "Ciclos" e não em "Dias"
-        function renderCycleGoal() {
+        function renderDailyGoal() {
             const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
             const startOfCycleBankroll = currentBanca.valor_inicial;
             const targetProfit = currentBanca.meta_diaria_percentual > 0 ? startOfCycleBankroll * (currentBanca.meta_diaria_percentual / 100) : 0;
-            const goalIsMet = targetProfit > 0 && cycleProfit >= targetProfit;
 
             document.getElementById('daily-goal-container').innerHTML = `
                 <h2 class="text-xl font-bold mb-4">Meta do Ciclo</h2>
@@ -181,19 +176,15 @@
                     <div class="flex justify-between text-sm"><span class="text-gray-400">Meta do Ciclo:</span><span class="font-semibold">${formatCurrency(targetProfit)}</span></div>
                     <div id="goal-met-container" class="hidden mt-4 space-y-2 text-center">
                         <h3 class="text-lg font-bold status-green">Parabéns, meta batida!</h3>
-                        <p class="text-sm text-gray-400">Feche o ciclo para salvar seu progresso e começar um novo.</p>
+                        <p class="text-sm text-gray-300 font-medium">Feche o ciclo para salvar seu progresso e começar um novo.</p>
                         <button id="close-cycle-btn" class="btn btn-green w-full"><i class="fas fa-flag-checkered mr-2"></i>Fechar e Iniciar Novo Ciclo</button>
                     </div>
                 </div>
             `;
-            
-            if (goalIsMet) {
+            if (cycleProfit >= targetProfit && targetProfit > 0) {
                 document.getElementById('goal-met-container').classList.remove('hidden');
-                // Desabilita o formulário de apostas quando a meta é atingida para forçar o fechamento do ciclo
-                document.getElementById('add-bet-form')?.querySelectorAll('input, button').forEach(el => el.disabled = true);
             }
         }
-
         function renderBetForm() {
             document.getElementById('bet-form-container').innerHTML = `
                 <h2 class="text-xl font-bold mb-4">Registrar Jogada</h2>
@@ -208,9 +199,7 @@
                     </div>
                 </form>
             `;
-            // A lógica de desabilitar o formulário foi movida para renderCycleGoal
         }
-
         function renderBets() {
             let rows = "";
             jogadas.forEach(bet => {
@@ -220,7 +209,7 @@
                         <td class="p-3 text-sm text-gray-400">${new Date(bet.data_jogada).toLocaleTimeString('pt-BR')}</td>
                         <td class="p-3 text-right">${formatCurrency(bet.valor_apostado)}</td>
                         <td class="p-3 text-right">${formatCurrency(bet.retorno)}</td>
-                        <td class="p-3 text-right ${profit > 0 ? 'status-green' : 'status-red'}">${formatCurrency(profit)}</td>
+                        <td class="p-3 text-right ${profit >= 0 ? 'status-green' : 'status-red'}">${formatCurrency(profit)}</td>
                         <td class="p-3 text-center">${bet.status.startsWith('win') ? '<span class="status-green">Ganha</span>' : '<span class="status-red">Perdida</span>'}</td>
                         <td class="p-3 text-center"><button class="text-red-500 hover:text-red-400 delete-btn" data-id="${bet.id}"><i class="fas fa-trash-alt"></i></button></td>
                     </tr>
@@ -241,45 +230,39 @@
         }
         function renderProjection() {
             let rows = "";
+            let bankrollForProjection = metasDiarias.length > 0 ? metasDiarias[0].banca_inicial : currentBanca.valor_inicial;
             
-            // 1. Renderiza o histórico de ciclos/metas já concluídos.
             metasDiarias.forEach((meta, index) => {
                 rows += `
                     <tr class="bg-green-900/50">
-                        <td class="p-3 text-sm text-gray-400 font-semibold">Ciclo ${index + 1}</td>
+                        <td class="p-3 text-sm text-gray-400">Ciclo ${index + 1}</td>
                         <td class="p-3 text-right">${formatCurrency(meta.banca_inicial)}</td>
                         <td class="p-3 text-right status-green">${formatCurrency(meta.lucro_final)}</td>
                         <td class="p-3 text-right font-semibold">${formatCurrency(meta.banca_final)}</td>
                         <td class="p-3 text-center"><span class="status-green font-semibold">Alcançado ✅</span></td>
                     </tr>
                 `;
+                bankrollForProjection = meta.banca_final;
             });
-
-            // 2. Calcula a banca inicial para as projeções futuras.
-            // É a banca inicial do ciclo atual + o lucro/prejuízo já obtido neste ciclo.
+            
             const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
-            let projectedStartBankroll = currentBanca.valor_inicial + cycleProfit;
+            bankrollForProjection += cycleProfit;
 
-            // 3. Renderiza a projeção para os próximos 15 ciclos.
             for (let i = 0; i < 15; i++) {
-                const cycleNumber = metasDiarias.length + i + 1;
-                const initialProjected = projectedStartBankroll;
+                const initialProjected = bankrollForProjection;
                 const goal = currentBanca.meta_diaria_percentual > 0 ? initialProjected * (currentBanca.meta_diaria_percentual / 100) : 0;
                 const finalProjected = initialProjected + goal;
                 rows += `
                     <tr>
-                        <td class="p-3 text-sm text-gray-400">Ciclo ${cycleNumber}</td>
+                        <td class="p-3 text-sm text-gray-400">Ciclo ${metasDiarias.length + i + 1}</td>
                         <td class="p-3 text-right">${formatCurrency(initialProjected)}</td>
                         <td class="p-3 text-right status-green">${formatCurrency(goal)}</td>
                         <td class="p-3 text-right font-semibold">${formatCurrency(finalProjected)}</td>
                         <td class="p-3 text-center">Pendente</td>
                     </tr>
                 `;
-                // A banca inicial do próximo ciclo projetado é a banca final do ciclo atual.
-                projectedStartBankroll = finalProjected;
+                bankrollForProjection = finalProjected;
             }
-
-            // 4. Monta o HTML final da tabela
             document.getElementById('projection-container').innerHTML = `
                 <h2 class="text-xl font-bold mb-4">Histórico e Projeção de Ciclos</h2>
                 <div class="overflow-x-auto"><table class="w-full text-left">
@@ -313,7 +296,7 @@
                 if (outcome === 'win_number') { result = chipValue * 36; status = 'win'; }
                 else if (outcome === 'win_zero') { result = zeroStake * 36; status = 'win_zero'; }
                 else if (outcome === 'loss') { result = 0; status = 'loss'; }
-                if (totalStake <= 0) return alert("Valor apostado inválido.");
+                if (totalStake <= 0 && outcome !== 'loss') return alert("Valor apostado inválido.");
                 const { data: newBet, error } = await db.from('jogadas').insert({ banca_id: currentBanca.id, valor_apostado: totalStake, retorno: result, status: status, estrategia: 'Jogada Manual' }).select().single();
                 if (error) { alert("Erro ao registrar jogada."); } else { jogadas.unshift(newBet); document.getElementById('add-bet-form').reset(); renderAll(); }
             });
@@ -337,9 +320,6 @@
                     const { data: newMeta, error: metaError } = await db.from('metas_diarias').insert({ 
                         user_id: currentUser.id, 
                         banca_id: currentBanca.id, 
-                        // CORREÇÃO: Usamos um timestamp completo para garantir um valor único.
-                        // Isso resolve o erro de "duplicate key" ao fechar múltiplos ciclos no mesmo dia.
-                        // IMPORTANTE: A coluna 'data' na sua tabela Supabase deve ser do tipo 'timestamp' ou 'timestamptz'.
                         data: new Date().toISOString(), 
                         status: 'concluida', 
                         lucro_final: cycleProfit, 
@@ -401,8 +381,4 @@
     </script>
 </body>
 </html>
-
-
-
-
 
