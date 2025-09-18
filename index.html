@@ -98,7 +98,8 @@
 
             const [jogadasRes, metasRes] = await Promise.all([
                 db.from("jogadas").select("*").eq("banca_id", currentBanca.id).order("data_jogada", { ascending: false }),
-                db.from("metas_diarias").select("*").eq("banca_id", currentBanca.id).order("data", { ascending: true })
+                // CORREÇÃO: Ordena os ciclos pela data de criação para garantir a ordem cronológica correta.
+                db.from("metas_diarias").select("*").eq("banca_id", currentBanca.id).order("created_at", { ascending: true })
             ]);
             jogadas = jogadasRes.data || [];
             metasDiarias = metasRes.data || [];
@@ -398,5 +399,6 @@
     </script>
 </body>
 </html>
+
 
 
