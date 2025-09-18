@@ -244,43 +244,50 @@
         }
         function renderProjection() {
             let rows = "";
-            let bankrollForProjection = metasDiarias[0]?.banca_inicial || currentBanca.valor_inicial;
-            metasDiarias.forEach(meta => {
+            
+            // 1. Renderiza o histórico de ciclos/metas já concluídos.
+            metasDiarias.forEach((meta, index) => {
                 rows += `
                     <tr class="bg-green-900/50">
-                        <td class="p-3 text-sm text-gray-400">${new Date(meta.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
-                        <td class="p-3 text-right">${formatCurrency(bankrollForProjection)}</td>
+                        <td class="p-3 text-sm text-gray-400 font-semibold">Ciclo ${index + 1}</td>
+                        <td class="p-3 text-right">${formatCurrency(meta.banca_inicial)}</td>
                         <td class="p-3 text-right status-green">${formatCurrency(meta.lucro_final)}</td>
                         <td class="p-3 text-right font-semibold">${formatCurrency(meta.banca_final)}</td>
                         <td class="p-3 text-center"><span class="status-green font-semibold">Alcançado ✅</span></td>
                     </tr>
                 `;
-                bankrollForProjection = meta.banca_final;
             });
+
+            // 2. Calcula a banca inicial para as projeções futuras.
+            // É a banca inicial do ciclo atual + o lucro/prejuízo já obtido neste ciclo.
             const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
-            bankrollForProjection += cycleProfit;
+            let projectedStartBankroll = currentBanca.valor_inicial + cycleProfit;
+
+            // 3. Renderiza a projeção para os próximos 15 ciclos.
             for (let i = 0; i < 15; i++) {
-                const lastDate = metasDiarias.length > 0 ? new Date(metasDiarias[metasDiarias.length - 1].data + 'T00:00:00') : new Date(new Date().setDate(new Date().getDate() - 1));
-                const date = new Date(lastDate); date.setDate(lastDate.getDate() + i + 1);
-                const initialProjected = bankrollForProjection;
+                const cycleNumber = metasDiarias.length + i + 1;
+                const initialProjected = projectedStartBankroll;
                 const goal = currentBanca.meta_diaria_percentual > 0 ? initialProjected * (currentBanca.meta_diaria_percentual / 100) : 0;
                 const finalProjected = initialProjected + goal;
                 rows += `
                     <tr>
-                        <td class="p-3 text-sm text-gray-400">${date.toLocaleDateString('pt-BR')}</td>
+                        <td class="p-3 text-sm text-gray-400">Ciclo ${cycleNumber}</td>
                         <td class="p-3 text-right">${formatCurrency(initialProjected)}</td>
                         <td class="p-3 text-right status-green">${formatCurrency(goal)}</td>
                         <td class="p-3 text-right font-semibold">${formatCurrency(finalProjected)}</td>
                         <td class="p-3 text-center">Pendente</td>
                     </tr>
                 `;
-                bankrollForProjection = finalProjected;
+                // A banca inicial do próximo ciclo projetado é a banca final do ciclo atual.
+                projectedStartBankroll = finalProjected;
             }
+
+            // 4. Monta o HTML final da tabela
             document.getElementById('projection-container').innerHTML = `
-                <h2 class="text-xl font-bold mb-4">Histórico de Metas e Projeção Futura</h2>
+                <h2 class="text-xl font-bold mb-4">Histórico e Projeção de Ciclos</h2>
                 <div class="overflow-x-auto"><table class="w-full text-left">
                     <thead class="border-b border-gray-700 text-sm text-gray-400">
-                        <tr><th class="p-3">Data</th><th class="p-3 text-right">Banca Inicial do Ciclo</th><th class="p-3 text-right">Lucro do Ciclo (R$)</th><th class="p-3 text-right">Banca Final do Ciclo</th><th class="p-3 text-center">Status</th></tr>
+                        <tr><th class="p-3">Ciclo</th><th class="p-3 text-right">Banca Inicial</th><th class="p-3 text-right">Meta de Lucro (R$)</th><th class="p-3 text-right">Banca Final Estimada</th><th class="p-3 text-center">Status</th></tr>
                     </thead>
                     <tbody>${rows}</tbody>
                 </table></div>
@@ -391,4 +398,5 @@
     </script>
 </body>
 </html>
+
 
