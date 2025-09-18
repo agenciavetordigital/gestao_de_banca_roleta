@@ -40,6 +40,7 @@
     .btn-primary { background: #3b82f6; }
     .btn-green { background: #16a34a; }
     .btn-red { background: #ef4444; }
+    .btn-blue { background: #0ea5e9; }
     .input-field {
       width: 100%;
       padding: 0.7rem;
@@ -469,9 +470,18 @@
       async function handleBet(type) {
         if (!currentBanca) return alert('Sem banca');
         const today = todayYMD();
-        if (metas.find(m => m._ymd === today && String(m.status).toLowerCase().includes('conclu'))) {
+
+        // Verificar se já existe meta concluída para hoje
+        const { data: todayMeta } = await db.from('metas_diarias')
+          .select('*')
+          .eq('banca_id', currentBanca.id)
+          .eq('data', today)
+          .maybeSingle();
+
+        if (todayMeta && String(todayMeta.status).toLowerCase().includes('conclu')) {
           return alert('Ciclo do dia já fechado. Não é possível registrar novas jogadas hoje');
         }
+
         const chip = parseFloat(document.getElementById('chip-value').value) || 0;
         const nums = parseInt(document.getElementById('numbers-covered').value) || 0;
         const zero = parseFloat(document.getElementById('zero-stake').value) || 0;
@@ -500,20 +510,32 @@
       // close cycle safely
       async function handleCloseCycle() {
         if (!currentBanca || !currentUser) return;
+
         const today = todayYMD();
-        const { data: existing, error: existErr } = await db.from('metas_diarias').select('*').eq('banca_id', currentBanca.id).eq('data', today).maybeSingle();
+
+        // 1. Verifique se já existe uma meta para hoje (no DB)
+        const { data: existingMeta, error: existErr } = await db.from('metas_diarias')
+          .select('*')
+          .eq('banca_id', currentBanca.id)
+          .eq('data', today)
+          .maybeSingle();
+
         if (existErr) {
           debug('Erro ao verificar meta hoje: ' + existErr.message, 'error');
-          return alert('Erro');
+          return alert('Erro ao verificar meta.');
         }
-        if (existing && String(existing.status).toLowerCase().includes('conclu')) {
-          debug('Já existe meta concluida hoje (DB).');
+
+        if (existingMeta && String(existingMeta.status).toLowerCase().includes('conclu')) {
+          debug('Já existe meta concluída hoje (DB).');
           await loadAllData();
           return alert('Já existe meta concluída hoje.');
         }
 
+        // 2. Se não existir, calcule o lucro e crie a meta
         const cycleProfit = jogadas.reduce((s, j) => s + ((j.retorno || 0) - (j.valor_apostado || 0)), 0);
         const finalBank = (currentBanca.valor_inicial || 0) + cycleProfit;
+
+        // 3. Insira ou atualize a meta (usando upsert)
         const { data, error } = await db.from('metas_diarias').upsert({
           user_id: currentUser.id,
           banca_id: currentBanca.id,
@@ -526,19 +548,22 @@
 
         if (error) {
           debug('Erro upsert meta: ' + error.message, 'error');
-          if (String(error.code) === '23505' || (error.message || '').toLowerCase().includes('duplicate')) {
+          if (String(error.code) === '23505') {
             debug('Violação única detectada (dup). Atualizando local e abortando.');
             await loadAllData();
             return alert('Já existe meta para hoje (detected duplicate).');
           }
-          return alert('Erro ao fechar ciclo: ' + (error.message || JSON.stringify(error)));
+          return alert('Erro ao fechar ciclo: ' + error.message);
         }
 
+        // 4. Atualize a banca inicial e limpe as jogadas
         const { error: updateErr } = await db.from('bancas').update({ valor_inicial: finalBank }).eq('id', currentBanca.id);
         const { error: delErr } = await db.from('jogadas').delete().eq('banca_id', currentBanca.id);
+
         if (updateErr) debug('Erro update banca: ' + updateErr.message, 'error');
         if (delErr) debug('Erro delete jogadas: ' + delErr.message, 'error');
 
+        // 5. Recarregue os dados
         await loadAllData();
         alert('Ciclo concluído. Nova meta liberada automaticamente amanhã.');
       }
