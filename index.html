@@ -80,10 +80,6 @@
 
         // --- FUNÇÕES AUXILIARES ---
         const formatCurrency = (v) => (v === null || v === undefined ? 0 : v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-        const getLocalDateString = (d) => {
-            const date = d ? new Date(d) : new Date();
-            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-        };
         
         // --- LÓGICA DE DADOS ---
         async function loadDashboardData() {
@@ -336,13 +332,15 @@
                 try {
                     const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
                     const finalBankroll = currentBanca.valor_inicial + cycleProfit;
-                    const todayStr = getLocalDateString();
 
                     // Salva o resultado do ciclo no histórico e retorna o registro inserido
                     const { data: newMeta, error: metaError } = await db.from('metas_diarias').insert({ 
                         user_id: currentUser.id, 
                         banca_id: currentBanca.id, 
-                        data: todayStr, 
+                        // CORREÇÃO: Usamos um timestamp completo para garantir um valor único.
+                        // Isso resolve o erro de "duplicate key" ao fechar múltiplos ciclos no mesmo dia.
+                        // IMPORTANTE: A coluna 'data' na sua tabela Supabase deve ser do tipo 'timestamp' ou 'timestamptz'.
+                        data: new Date().toISOString(), 
                         status: 'concluida', 
                         lucro_final: cycleProfit, 
                         banca_final: finalBankroll,
@@ -403,6 +401,7 @@
     </script>
 </body>
 </html>
+
 
 
 
