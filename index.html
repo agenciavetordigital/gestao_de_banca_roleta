@@ -130,7 +130,7 @@
             // Renderiza os componentes individuais
             renderMetrics(); 
             renderSettings(); 
-            renderDailyGoal(); 
+            renderCycleGoal(); // Alterado de renderDailyGoal para renderCycleGoal
             renderBetForm(); 
             renderBets(); 
             renderProjection();
@@ -144,13 +144,15 @@
             const totalStaked = jogadas.reduce((acc, j) => acc + j.valor_apostado, 0);
             const wonPlays = jogadas.filter(j => j.retorno > j.valor_apostado).length;
             const currentBankroll = currentBanca.valor_inicial + cycleProfit;
-            let totalProfitAllTime = cycleProfit;
+            let totalProfitAllTime = 0;
+            // O lucro total agora é a soma de todos os lucros de ciclos passados, mais o lucro do ciclo atual
             metasDiarias.forEach(meta => { totalProfitAllTime += meta.lucro_final; });
+            totalProfitAllTime += cycleProfit;
             const roi = totalStaked > 0 ? (cycleProfit / totalStaked) * 100 : 0;
             const winRate = jogadas.length > 0 ? (wonPlays / jogadas.length) * 100 : 0;
 
             document.getElementById('metrics-container').innerHTML = `
-                <div class="card"><h3 class="text-sm font-medium text-gray-400">BANCA INICIAL</h3><p class="text-2xl font-semibold mt-2">${formatCurrency(metasDiarias[0]?.banca_inicial || currentBanca.valor_inicial)}</p></div>
+                <div class="card"><h3 class="text-sm font-medium text-gray-400">BANCA INICIAL (TOTAL)</h3><p class="text-2xl font-semibold mt-2">${formatCurrency(metasDiarias[0]?.banca_inicial || currentBanca.valor_inicial)}</p></div>
                 <div class="card"><h3 class="text-sm font-medium text-gray-400">BANCA ATUAL</h3><p class="text-2xl font-semibold mt-2">${formatCurrency(currentBankroll)}</p></div>
                 <div class="card"><h3 class="text-sm font-medium text-gray-400">LUCRO TOTAL</h3><p class="text-2xl font-semibold mt-2">${formatCurrency(totalProfitAllTime)}</p></div>
                 <div class="card"><h3 class="text-sm font-medium text-gray-400">ROI DO CICLO</h3><p class="text-2xl font-semibold mt-2">${roi.toFixed(2)}%</p></div>
@@ -167,13 +169,13 @@
                 </div>
             `;
         }
-        function renderDailyGoal() {
-            const todayStr = getLocalDateString();
-            const todayMeta = metasDiarias.find(m => m.data === todayStr);
+        
+        // Lógica de meta foi refatorada para focar em "Ciclos" e não em "Dias"
+        function renderCycleGoal() {
             const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
             const startOfCycleBankroll = currentBanca.valor_inicial;
             const targetProfit = currentBanca.meta_diaria_percentual > 0 ? startOfCycleBankroll * (currentBanca.meta_diaria_percentual / 100) : 0;
-            const dayIsClosed = todayMeta && todayMeta.status === 'concluida';
+            const goalIsMet = targetProfit > 0 && cycleProfit >= targetProfit;
 
             document.getElementById('daily-goal-container').innerHTML = `
                 <h2 class="text-xl font-bold mb-4">Meta do Ciclo</h2>
@@ -181,24 +183,20 @@
                     <div class="flex justify-between text-sm"><span class="text-gray-400">Lucro do Ciclo:</span><span class="font-semibold">${formatCurrency(cycleProfit)}</span></div>
                     <div class="flex justify-between text-sm"><span class="text-gray-400">Meta do Ciclo:</span><span class="font-semibold">${formatCurrency(targetProfit)}</span></div>
                     <div id="goal-met-container" class="hidden mt-4 space-y-2 text-center">
-                        <h3 id="goal-title" class="text-lg font-bold status-green">Parabéns, meta batida!</h3>
-                        <button id="goal-met-btn" class="btn btn-green w-full"><i class="fas fa-flag-checkered mr-2"></i>Fechar Ciclo</button>
-                        <button id="new-day-btn" class="btn btn-primary w-full hidden"><i class="fas fa-redo-alt mr-2"></i>Começar Novo Ciclo</button>
-                        <p id="goal-met-message" class="text-sm text-gray-300 font-medium"></p>
+                        <h3 class="text-lg font-bold status-green">Parabéns, meta batida!</h3>
+                        <p class="text-sm text-gray-400">Feche o ciclo para salvar seu progresso e começar um novo.</p>
+                        <button id="close-cycle-btn" class="btn btn-green w-full"><i class="fas fa-flag-checkered mr-2"></i>Fechar e Iniciar Novo Ciclo</button>
                     </div>
                 </div>
             `;
-            const goalMetContainer = document.getElementById('goal-met-container');
-            if (dayIsClosed) {
-                goalMetContainer.classList.remove('hidden');
-                document.getElementById('goal-title').textContent = "Ciclo Concluído!";
-                document.getElementById('goal-met-message').textContent = `O ciclo do dia ${new Date(todayStr + 'T00:00:00').toLocaleDateString('pt-BR')} foi fechado.`;
-                document.getElementById('goal-met-btn').classList.add('hidden');
-                document.getElementById('new-day-btn').classList.remove('hidden');
-            } else if (cycleProfit >= targetProfit && targetProfit > 0) {
-                goalMetContainer.classList.remove('hidden');
+            
+            if (goalIsMet) {
+                document.getElementById('goal-met-container').classList.remove('hidden');
+                // Desabilita o formulário de apostas quando a meta é atingida para forçar o fechamento do ciclo
+                document.getElementById('add-bet-form')?.querySelectorAll('input, button').forEach(el => el.disabled = true);
             }
         }
+
         function renderBetForm() {
             document.getElementById('bet-form-container').innerHTML = `
                 <h2 class="text-xl font-bold mb-4">Registrar Jogada</h2>
@@ -213,12 +211,9 @@
                     </div>
                 </form>
             `;
-            const todayStr = getLocalDateString();
-            const todayMeta = metasDiarias.find(m => m.data === todayStr);
-            if (todayMeta && todayMeta.status === 'concluida') {
-                document.getElementById('add-bet-form').querySelectorAll('input, button').forEach(el => el.disabled = true);
-            }
+            // A lógica de desabilitar o formulário foi movida para renderCycleGoal
         }
+
         function renderBets() {
             let rows = "";
             jogadas.forEach(bet => {
@@ -323,34 +318,46 @@
                 await db.from("jogadas").delete().eq("banca_id", currentBanca.id);
                 jogadas = []; renderAll();
             });
-            document.getElementById("goal-met-btn")?.addEventListener("click", async () => {
-                const todayStr = getLocalDateString();
-                const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
-                const finalBankroll = currentBanca.valor_inicial + cycleProfit;
-                const { data: newMeta, error } = await db.from('metas_diarias').upsert({ user_id: currentUser.id, banca_id: currentBanca.id, data: todayStr, status: 'concluida', lucro_final: cycleProfit, banca_final: finalBankroll }, { onConflict: 'banca_id, data' }).select().single();
-                if (!error) {
-                    const index = metasDiarias.findIndex(m => m.data === todayStr);
-                    if (index > -1) metasDiarias[index] = newMeta; else metasDiarias.push(newMeta);
-                    renderAll();
-                }
-            });
-            document.getElementById("new-day-btn")?.addEventListener("click", async () => {
-                const btn = document.getElementById("new-day-btn");
+            
+            // Evento para o novo botão que fecha um ciclo e prepara o próximo
+            document.getElementById("close-cycle-btn")?.addEventListener("click", async () => {
+                const btn = document.getElementById("close-cycle-btn");
                 btn.disabled = true;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Iniciando...';
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Fechando...';
+
                 try {
-                    const finalBankroll = currentBanca.valor_inicial + jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
+                    const cycleProfit = jogadas.reduce((acc, j) => acc + (j.retorno - j.valor_apostado), 0);
+                    const finalBankroll = currentBanca.valor_inicial + cycleProfit;
+                    const todayStr = getLocalDateString();
+
+                    // Salva o resultado do ciclo no histórico. 
+                    // Usamos 'insert' para permitir múltiplos ciclos concluídos no mesmo dia.
+                    await db.from('metas_diarias').insert({ 
+                        user_id: currentUser.id, 
+                        banca_id: currentBanca.id, 
+                        data: todayStr, 
+                        status: 'concluida', 
+                        lucro_final: cycleProfit, 
+                        banca_final: finalBankroll,
+                        banca_inicial: currentBanca.valor_inicial 
+                    });
+
+                    // Atualiza a banca principal com o novo valor inicial para o próximo ciclo
                     await db.from('bancas').update({ valor_inicial: finalBankroll }).eq('id', currentBanca.id);
+                    
+                    // Apaga as jogadas do ciclo que acabou de ser fechado
                     await db.from('jogadas').delete().eq('banca_id', currentBanca.id);
-                    // Recarrega os dados do zero, sem recarregar a página
-                    jogadas = [];
+                    
+                    // Recarrega todos os dados do dashboard para refletir o novo estado (novo ciclo)
                     await loadDashboardData();
+
                 } catch (error) {
-                    alert('Ocorreu um erro: ' + error.message);
+                    alert('Ocorreu um erro ao fechar o ciclo: ' + error.message);
                     btn.disabled = false;
-                    btn.innerHTML = '<i class="fas fa-redo-alt mr-2"></i>Começar Novo Ciclo';
+                    btn.innerHTML = '<i class="fas fa-flag-checkered mr-2"></i>Fechar e Iniciar Novo Ciclo';
                 }
             });
+
             document.getElementById("bets-history-container")?.addEventListener("click", async (e) => {
                 if (e.target.closest('.delete-btn')) {
                     const button = e.target.closest('.delete-btn');
